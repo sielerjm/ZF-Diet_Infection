@@ -1,0 +1,1101 @@
+
+
+
+# test
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Development
+
+## Physiology
+
+### Body Condition ~ Alpha
+
+```{r Alpha-BodyCond-Diet, message=FALSE, warning=FALSE, include=FALSE}
+
+data <- dt.alphaPlus.conT0T1.melt
+
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Body.Condition.Score ~ Alpha.Score*Diet",
+       data = subset(data, Alpha.Metric == alpha),
+       family = "gaussian")
+})
+
+plot <- list()
+plot <- lapply(names(methods.alpha), function(x){
+   # subset(data, Alpha.Metric == x)
+
+   p <- ggplot(data = subset(data, Alpha.Metric == x),
+              aes_string(x = "Alpha.Score", y = "Body.Condition.Score")) +
+    geom_point(aes(color = Diet, fill = Timepoint), shape = 21, stroke = 1, size = 3 # converts string to var name
+    ) +
+    geom_smooth(aes(color = Diet),
+                method="glm", 
+                size = 1, 
+                alpha = .20) + 
+    # facet_grid(paste0(". ~ Diet"), scales = "free_y") + 
+    scale_fill_manual(values = col.timepoint) +
+    scale_color_manual(values = pal.Dark2) +
+    # guides(fill=guide_legend(title="Diet")) +
+    theme(legend.position = "bottom", legend.box = "horizontal") +
+    labs(
+      title = sub_char_var("glm(Body.Condition.Score ~ Alpha.Score*Diet)", ".", " "),
+      #caption = ifelse(caption != "", caption, ""),
+      y = sub_char_var("Body.Condition.Score", ".", " "),
+      x = paste0(sub_char_var("Alpha.Score", ".", " "), " (", x,")")
+    )
+})
+
+
+# Plot
+plot
+
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% summary() #%>% pander() #%>% report_table()
+})
+
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2)
+})
+
+lapply(methods.alpha, function(x){
+  gen_glm_anova(mod.list[[x]], x)
+}) %>% bind_rows() %>% flextable() #%>% set_caption(caption = extract_modForm(mod.list[[1]]))
+
+
+```
+### Length
+
+```{r Alpha-BodyCond-Diet, message=FALSE, warning=FALSE, include=FALSE}
+
+data <- dt.alphaPlus.conT0T1.melt %>% filter(Diet == "ZIRC")
+
+tmp.data <- data %>%
+  aw
+  pivot_longer()
+
+
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Length ~ Alpha.Score:Timepoint",
+       data = subset(data, Alpha.Metric == alpha),
+       family = "gaussian")
+})
+
+plot <- list()
+plot <- lapply(names(methods.alpha), function(x){
+   # subset(data, Alpha.Metric == x)
+
+   p <- ggplot(data = subset(data, Alpha.Metric == x),
+              aes_string(x = "Alpha.Score", y = "Length")) +
+    geom_point(aes(color = Diet, fill = Timepoint), shape = 21, stroke = 1, size = 3 # converts string to var name
+    ) +
+    geom_smooth(aes(color = Timepoint),
+                method="glm", 
+                size = 1, 
+                alpha = .20) + 
+    # facet_grid(paste0(". ~ Diet"), scales = "free_y") + 
+    scale_fill_manual(values = col.timepoint) +
+    scale_color_manual(values = pal.Dark2) +
+    # guides(fill=guide_legend(title="Diet")) +
+    theme(legend.position = "bottom", legend.box = "horizontal") +
+    labs(
+      title = sub_char_var("glm(Body.Condition.Score ~ Alpha.Score*Diet)", ".", " "),
+      #caption = ifelse(caption != "", caption, ""),
+      y = sub_char_var("Body.Condition.Score", ".", " "),
+      x = paste0(sub_char_var("Alpha.Score", ".", " "), " (", x,")")
+    )
+})
+
+
+# Plot
+plot
+
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% summary() #%>% pander() #%>% report_table()
+})
+
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2)
+})
+
+lapply(methods.alpha, function(x){
+  gen_glm_anova(mod.list[[x]], x)
+}) %>% bind_rows() %>% flextable() #%>% set_caption(caption = extract_modForm(mod.list[[1]]))
+
+
+```
+
+## Dispersion
+
+### Initial, Diets
+
+```{r}
+
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = df.T0,
+                physeq = ps.T0,
+                vars = "Diet",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+plot <- betaUncon_plot(data = df.T0, 
+                        # method = "", 
+                        physeq = ps.T0, 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Diet",
+                        # x.var.2 = "Diet",
+                        # shape = "Diet.Time",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+```
+
+### Final, Diets
+
+```{r}
+# Diet dispersion final, gemma vs watts vs zirc
+beta_hom_disper(data = df.conT1,
+                physeq = ps.conT1,
+                vars = "Diet",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+
+```
+
+### Time
+
+```{r}
+# Time dispersion initial vs final, regardless of diet
+beta_hom_disper(data = df.conT0T1,
+                physeq = ps.conT0T1,
+                vars = "Timepoint",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+
+```
+
+
+#### Gemma
+
+```{r}
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = subset(df.conT0T1, Diet == "Gemma"),
+                physeq = subset_samples(ps.conT0T1, Diet == "Gemma"),
+                vars = "Timepoint",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+plot <- betaUncon_plot(data = subset(df.conT0T1, Diet == "Gemma"), 
+                        # method = "", 
+                        physeq = subset_samples(ps.conT0T1, Diet == "Gemma"), 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Timepoint",
+                        # x.var.2 = "Diet",
+                        # shape = "Sex",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+```
+
+
+#### Watts
+
+```{r}
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = subset(df.conT0T1, Diet == "Watts"),
+                physeq = subset_samples(ps.conT0T1, Diet == "Watts"),
+                vars = "Timepoint",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+
+plot <- betaUncon_plot(data = subset(df.conT0T1, Diet == "Watts"), 
+                        # method = "", 
+                        physeq = subset_samples(ps.conT0T1, Diet == "Watts"), 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Timepoint",
+                        # x.var.2 = "Diet",
+                        # shape = "Sex",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+
+
+```
+
+#### ZIRC
+
+```{r}
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = subset(df.conT0T1, Diet == "ZIRC"),
+                physeq = subset_samples(ps.conT0T1, Diet == "ZIRC"),
+                vars = "Timepoint",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+plot <- betaUncon_plot(data = subset(df.conT0T1, Diet == "ZIRC"), 
+                        # method = "", 
+                        physeq = subset_samples(ps.conT0T1, Diet == "ZIRC"), 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Timepoint",
+                        # x.var.2 = "Diet",
+                        # shape = "Sex",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+```
+
+
+
+### Time*Diets
+
+```{r}
+# Time:Diet dispersion,  gemma (initial vs final) vs watts (initial vs final) vs zirc (initial vs final)
+
+ps.obj <- ps.conT0T1
+data <- df.conT0T1
+
+# ADD INTERACTION
+sample_data(ps.obj) <- microbiome::meta(ps.obj) %>%
+  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age) 
+
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+
+beta_hom_disper(data = data,
+                physeq = ps.obj,
+                vars = "Diet.Time",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+
+plot <- betaUncon_plot(data = data, 
+                        # method = "", 
+                        physeq = ps.obj, 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Diet.Time",
+                        # x.var.2 = "Diet",
+                        # shape = "Diet.Time",
+                        title = "",
+                        colors = c(pal.Set2[1], pal.Dark2[1], pal.Set2[2],pal.Dark2[2], pal.Set2[3], pal.Dark2[3])
+                        )
+
+plot2 <- betaUncon_plot(data = data, 
+                        # method = "", 
+                        physeq = ps.obj, 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Timepoint",
+                        # x.var.2 = "Diet",
+                        # shape = "Diet.Time",
+                        title = "",
+                        colors = c(pal.Set2[4], pal.Dark2[4])
+                        )
+
+
+plot
+plot2
+
+
+```
+
+### BCS ~ Time
+
+#### Initial
+
+
+```{r}
+
+data = df.T0
+ps.obj = ps.T0
+dist = distList.T0
+
+# Full dbRDA models
+
+mod <- full_dbrda_model(vars = c("Body.Condition.Score", "Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores)
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+stats_table(anova)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+# Plot
+plot <- gen_PCoA_Num_Plot_vector(data = beta.dt.full,
+                                 mod = mod,
+                                 x.var = "Body.Condition.Score",
+                                 x.var.2 = "Diet",  # Optional
+                                 y.var = methods.beta,
+                                 elps.var = "Diet",  # Optional
+                                 axis = beta.axis.full,
+                                 stats = anova,  # Optional
+                                 # title = "The effect of diet on the composition of the gut microbiome",  # Optional
+                                 # title = NULL  # Null returns no title to the top, "" returns: "<beta.metric> ~ <variable>"
+                                 disp.stats = T , # Optional
+                                 )
+
+plot3 <- betaUncon_plot_num(data = data, 
+                        # method = "", 
+                        physeq = ps.obj, 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Diet",
+                        x.var.2 = "Body.Condition.Score",
+                        title = "",
+                        colors = col.diet
+                        )
+plot3
+
+```
+
+#### Final
+
+
+```{r}
+
+data = df.conT0T1
+ps.obj = ps.conT0T1
+dist = distList.conT0T1
+
+# Full dbRDA models
+
+mod <- full_dbrda_model(vars = c("Body.Condition.Score", "Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores)
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+stats_table(anova)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+# Plot
+plot <- gen_PCoA_Num_Plot_vector(data = beta.dt.full,
+                                 mod = mod,
+                                 x.var = "Body.Condition.Score",
+                                 x.var.2 = "Diet",  # Optional
+                                 y.var = methods.beta,
+                                 elps.var = "Diet",  # Optional
+                                 axis = beta.axis.full,
+                                 stats = anova,  # Optional
+                                 # title = "The effect of diet on the composition of the gut microbiome",  # Optional
+                                 # title = NULL  # Null returns no title to the top, "" returns: "<beta.metric> ~ <variable>"
+                                 disp.stats = T , # Optional
+                                 )
+
+plot3 <- betaUncon_plot_num(data = data, 
+                        # method = "", 
+                        physeq = ps.obj, 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "Diet",
+                        x.var.2 = "Body.Condition.Score",
+                        title = "",
+                        colors = pal.Dar
+                        )
+plot3
+
+```
+
+
+
+
+
+
+
+```{r}
+gen_box_plot(data = data,
+                      "Body.Cond_lvl",  # x-variable
+                      "Shannon",  # y-variable
+                      facet.var.x = c("Timepoint"),  # Optional: c("Diet", "Sex") or "Diet"
+                      # facet.var.y = "Sex",  # Optional
+                      colors = pal.Dark2,  # Optional, col.diet or "Sex"
+                      # title = "",  # Optional
+                      # title = title  # Optional.
+                      # caption = formula #"0 = uninfected, 1 = infected"  # Optional
+                      ) 
+
+pair.wilcox.test_gen(
+  data = df.conT0T1,
+  respVar = "Body.Condition.Score",
+  expVar1 = "Timepoint",
+  expVar2 = "Diet"
+)
+
+
+gen_scatter_plot(data = data ,
+                      "Shannon",  # x-variable
+                      "Body.Condition.Score",  # y-variable
+                      # facet.var.x = c("Diet"),  # Optional: c("Diet", "Sex") or "Diet"
+                      # facet.var.y = "Sex",  # Optional
+                      colors = pal.Dark2,  # Optional, col.diet or "Sex"
+                      # title = "",  # Optional
+                      # title = title  # Optional.
+                      # caption = formula #"0 = uninfected, 1 = infected"  # Optional
+                      ) 
+```
+
+
+
+# Pathogen Exposure
+
+## Infection Counts, Body Condition Score
+
+```{r}
+
+df.expFin %>% count()
+
+df.expFin %>% group_by(Infection.Status) %>% count()
+
+df.expFin %>% group_by(Sex) %>% count()
+
+df.expFin %>% group_by(Diet, Sex) %>% count()
+
+df.expFin %>% group_by(Sex, Infection.Status) %>% count()
+
+df.expFin %>% 
+  group_by(Diet, Sex, Infection.Status) %>%
+  count() %>% 
+  flextable()
+
+df.T1 %>% 
+  # filter(Sex == "M") %>%
+  lm(formula = Body.Condition.Score ~ Diet*PrePostExp) %>%
+  Anova()
+
+
+
+
+gen_box_plot(data = df.T1,
+                      "PrePostExp",  # x-variable
+                      "Body.Condition.Score",  # y-variable
+                      facet.var.x = c("Diet"),  # Optional: c("Diet", "Sex") or "Diet"
+                      # facet.var.y = "Sex",  # Optional
+                      colors = pal.Dark2,  # Optional, col.diet or "Sex"
+                      # title = "",  # Optional
+                      # title = title  # Optional.
+                      # caption = formula #"0 = uninfected, 1 = infected"  # Optional
+                      ) 
+
+gen_scatter_plot(data = df.T1 ,
+                      "PrePostExp",  # x-variable
+                      "Body.Condition.Score",  # y-variable
+                      facet.var.x = c("Diet"),  # Optional: c("Diet", "Sex") or "Diet"
+                      # facet.var.y = "Sex",  # Optional
+                      colors = pal.Dark2,  # Optional, col.diet or "Sex"
+                      # title = "",  # Optional
+                      # title = title  # Optional.
+                      # caption = formula #"0 = uninfected, 1 = infected"  # Optional
+                      ) 
+
+
+pair.wilcox.test_gen(
+  data = df.T1,
+  respVar = "Body.Condition.Score",
+  expVar1 = "PrePostExp"
+  # expVar2 = "PrePostExp"
+)
+
+pair.wilcox.test_gen(
+  data = df.T1,
+  respVar = "Body.Condition.Score",
+  expVar1 = "Diet",
+  expVar2 = "PrePostExp"
+)
+
+
+```
+
+
+## Beta Diversity
+
+### Does exposure status and diet affect microbiome composition?
+
+```{r beta-PrePostExp, message=FALSE, warning=FALSE, include=FALSE}
+
+
+data = df.expFin
+ps.obj = ps.expFin
+dist = distList.expFin
+
+
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Unexposed", "Exposed"))
+data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Unexposed")
+
+
+levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Unexposed", "Exposed"))
+sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Unexposed")
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("PrePostExp", "Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores)
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+p <- anova(mod$`Bray-Curtis`)$`Pr(>F)`[1]
+
+p$`Pr(>F)`
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+# Plot
+ggplot(beta.dt.full[Dist == "Bray-Curtis"], aes(x = CAP1, y = CAP2))  +
+      geom_point(aes(color = PrePostExp, 
+                     fill = Diet),
+                 alpha = 0.95, size = 2, shape = 21, stroke = 1) +
+  scale_color_manual(values = c("white", "black")) + 
+  scale_fill_manual(values = pal.Dark2) + 
+  theme(legend.position = "bottom")
+
+plot2 <- betaUncon_plot(data = data, 
+                        # method = "", 
+                        physeq = ps.obj, 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "PrePostExp",
+                        x.var.2 = "Diet",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+
+```
+
+```{r echo=FALSE, fig.height=5, fig.width=5}
+
+
+# Stats
+stats_table(anova)
+
+anova %>% pander()
+
+# How to run numerical variable on beta disp?
+
+beta_hom_disper(data = data,
+                physeq = ps.obj,
+                vars = "PrePostExp",
+                methods = c("bray",
+                            "canberra",
+                            "sor"
+                            ),
+                plot = F,
+                factor = T)
+
+
+plot2
+```
+
+```{r dist-plot-jittered-PrePostExp}
+
+data = df.all
+datatable = dt.all
+dist = distList.all
+tmp.var = "PrePostExp"
+tmp.var.list = unique(data[[tmp.var]])
+
+dist.list.jittered <- lapply(methods.beta, function(beta){
+  dist[[beta]] %>%
+  as.matrix() %>%
+  as_tibble(rownames = "Sample_A") %>%
+  pivot_longer(-Sample_A, names_to = "Sample_B", values_to = "Distances") %>%
+  filter(Sample_A < Sample_B) %>%
+  inner_join(., datatable, by=c("Sample_A" = "Sample")) %>% 
+  dplyr::select(Sample_A, Sample_B, Distances, tmp.var ) %>% rename(Var_A = tmp.var ) %>% relocate(Var_A, .after = Sample_A) %>%
+  inner_join(., datatable, by=c("Sample_B" = "Sample")) %>% 
+  dplyr::select(Sample_A, Var_A, Sample_B, Distances, tmp.var) %>% rename(Var_B = tmp.var ) %>% relocate(Var_B, .after = Sample_B) %>%
+  mutate(Var = case_when(
+    Sample_A != Sample_B & Var_A == tmp.var.list[1] & Var_A == Var_B ~ tmp.var.list[1],
+    Sample_A != Sample_B & Var_A == tmp.var.list[2] & Var_A == Var_B ~ tmp.var.list[2],
+    Sample_A != Sample_B & Var_A == tmp.var.list[3] & Var_A == Var_B ~ tmp.var.list[3],
+    TRUE ~ NA_character_),
+    Var = factor(Var, levels=tmp.var.list)
+    ) %>%
+  # count(Var)
+  drop_na() %>%
+  ggplot(aes(x=Var, y=Distances)) +
+  ggbeeswarm::geom_quasirandom(aes(color = Var), alpha = .67) +
+  stat_summary(fun.data=median_hilow, color="black", size=1,
+               fun.args = list(conf.int=0.50)) +
+  labs(x=NULL, y= paste0(beta, " distances"))+
+  scale_y_continuous(limits=c(0, 1), breaks=seq(0, 1, 0.2)) +
+  theme_classic() +
+  scale_color_manual(name = tmp.var, values = col.prepostexp) +
+  theme(legend.position = "bottom")
+})
+
+
+dist.list.jittered
+
+```
+
+### Dispersion
+
+#### Gemma
+
+```{r}
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = subset(df.all, Diet == "Gemma"),
+                physeq = subset_samples(ps.all, Diet == "Gemma"),
+                vars = "PrePostExp",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+plot <- betaUncon_plot(data = subset(df.all, Diet == "Gemma"), 
+                        # method = "", 
+                        physeq = subset_samples(ps.all, Diet == "Gemma"), 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "PrePostExp",
+                        # x.var.2 = "Diet",
+                        # shape = "Sex",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+```
+
+
+#### Watts
+
+```{r}
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = subset(df.all, Diet == "Watts"),
+                physeq = subset_samples(ps.all, Diet == "Watts"),
+                vars = "PrePostExp",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+
+plot <- betaUncon_plot(data = subset(df.all, Diet == "Watts"), 
+                        # method = "", 
+                        physeq = subset_samples(ps.all, Diet == "Watts"), 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "PrePostExp",
+                        # x.var.2 = "Diet",
+                        # shape = "Sex",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+
+
+```
+
+#### ZIRC
+
+```{r}
+
+# Diet dispersion initial, gemma vs watts vs zirc
+beta_hom_disper(data = subset(df.all, Diet == "ZIRC"),
+                physeq = subset_samples(ps.all, Diet == "ZIRC"),
+                vars = "PrePostExp",
+                methods = c("bray",
+                            "canberra"
+                            ),
+                plot = T,
+                factor = T)
+
+plot <- betaUncon_plot(data = subset(df.all, Diet == "ZIRC"), 
+                        # method = "", 
+                        physeq = subset_samples(ps.all, Diet == "ZIRC"), 
+                        # dist = "bray", 
+                        facet.var.x = ".", 
+                        facet.var.y = ".",
+                        x.var = "PrePostExp",
+                        # x.var.2 = "Diet",
+                        # shape = "Sex",
+                        title = "",
+                        colors = pal.Dark2
+                        )
+
+plot
+```
+
+
+
+# Unconstrained plots and dispersion
+
+```{r}
+
+ord.beta <- c("bray", "canberra")
+
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+```
+
+```{r}
+
+plot <- 
+  lapply(data.beta, function(beta) {
+    beta %>%
+    ggplot(aes(x = Axis.1, y = Axis.2)) +
+    geom_point(aes(color = Diet)) +
+    labs(x = "Axis 1",
+        y = "Axis 2"
+        ) +
+    stat_ellipse(aes(color = Diet)) +
+        scale_fill_manual(values = pal.Dark2) +
+        scale_color_manual(values = pal.Dark2) + 
+    geom_point(data = beta %>% group_by(Diet) %>% summarize_at(c("Axis.1", "Axis.2"), mean, na.rm = T), 
+               aes(x = Axis.1, y = Axis.2,
+                   color = Diet), 
+               shape = 13,
+               size = 3
+               ) +
+        theme(legend.position = "bottom")
+  })
+
+plot
+
+
+# Plot dispersion (distance from centroid)
+test <- list()
+test <- 
+lapply(data.beta, function(beta) {
+  beta %>%
+    mutate(ID = row_number(), .before = 1) %>%  # Add row IDs for later dataframe merging
+    group_by(Diet) %>%  # group by diet
+    summarise(ID = ID,  # transfer row number ID
+              centroid.x = mean(Axis.1),  # Find the mean value of x's
+              centroid.y = mean(Axis.2),  # Find the mean value of y's
+              x = (centroid.x - Axis.1)^2,  # Find the distance between x's
+              y = (centroid.y - Axis.2)^2,  # Find the distance between y's
+              dist = sqrt(x+y)  # Find the euclidean distance
+              ) %>%
+    arrange(ID) %>%  # Arrange by IDs like original dataframe
+    select(ID, dist, Diet) %>%  # Select columns you want to join to the original dataframe
+    left_join(x=.,  # Dataframe 1
+              y = beta %>%  # Dataframe 2
+                mutate(ID = row_number(), .before = 1), # Add row IDs to dataframe 2 to match dataframe rows
+              by = c("Diet", "ID")) #%>%  # What columns between the two dataframes match each other? Will join on these
+    # Stats
+    # rstatix::wilcox_test(data =., dist ~ Diet) %>%
+    # rstatix::adjust_pvalue(method = "BH") %>%
+    # rstatix::add_significance("p.adj")
+    
+    # # Plot
+    # ggplot() +
+    # geom_boxplot(aes(x = Diet, y = dist, fill = Diet)) +
+    # geom_quasirandom(aes(x = Diet, y = dist), size = 1) +
+    #   scale_fill_manual(values = pal.Dark2) +
+    #   scale_color_manual(values = pal.Set1) + 
+    #   labs(
+    #     # title = "",
+    #     # caption = "",
+    #     x = "Diet",
+    #     y = "Distance to Centroid"
+    #   ) +
+    # theme(legend.position = "none")
+})
+
+pair.wilcox.test_gen(test$bray, "dist", "Diet")
+pair.wilcox.test_gen(test$canberra, "dist", "Diet")
+
+
+
+# Beta-dispersion Table
+beta.disp <- list()
+beta.disp <- lapply(dist[1:2], function(beta) {
+  betadisper(beta, group = data$Diet)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+
+```
+
+# Multiple test comparision GLM()
+
+## Within a group
+
+```{r}
+
+levels(data.alpha$Timepoint) <- factor(levels(data.alpha$Timepoint), levels = c("3mpf", "6mpf"))
+data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "3mpf")
+
+data.alpha %>%
+  factor(levels(data.alpha$Timepoint), levels = c("3mpf", "6mpf"))
+
+
+a <- data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+  group_by(Diet) %>%
+  nest(data = -Diet) %>%
+  mutate(test = map(.x=data, 
+                    ~summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Timepoint, 
+                         data = .x,
+                         family = "quasibinomial"), 
+                         linfct = mcp(Timepoint = "Tukey")) )%>% tidy
+                    )) %>%
+  unnest(test) %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(data, null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1) 
+
+
+b <- a %>% as_tibble() %>% select(Diet, `.y.`, group1, group2, p.adj.signif)
+
+data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x = Timepoint, 
+               y = Alpha.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Set1) +
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Time",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(b, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(1.075)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(0, 1.1)) +
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+test
+```
+
+```{r}
+a
+```
+
+
+
+## All comparisons
+
+```{r}
+
+test <- data.alpha  %>%
+  mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age)
+
+
+test <- data.alpha  %>%
+  mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age)
+
+levels(test$Diet.Time) <- factor(levels(test$Diet.Time), levels = c("Gemma.3mpf", "Gemma.6mpf", "Watts.3mpf", "Watts.6mpf", "ZIRC.3mpf", "ZIRC.6mpf"))
+test$Diet.Time <- relevel(factor(test$Diet.Time), ref = "Gemma.3mpf")
+
+mod <- glm( formula = "Alpha.Score ~ -1 + Diet.Time",
+       data = test %>% filter(Alpha.Metric == "Shannon"),
+       family = "quasibinomial")
+
+mod %>% summary()
+
+test$Diet.Time
+
+library(multcomp)
+# Source: https://stats.stackexchange.com/a/60361
+# Source: https://cran.r-project.org/web/packages/multcomp/vignettes/multcomp-examples.pdf
+
+
+summary(multcomp::glht(mod, linfct = mcp(Diet.Time = "Tukey")), p.adjust.methods = "BH") %>% 
+      tidy() %>%
+      mutate(sig = ifelse(adj.p.value <= 0.05, "*", "")) %>% 
+      flextable() %>%
+      align(j = 3:6, align = "right") %>%
+      colformat_double(j = 4:6, digits = 3) %>%
+      merge_v(j = 1) %>%
+      set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+      set_caption(paste0("Pairwise Tukey's HSD, p.adj: BH. glm(", mod$formula, ", family = quasibinomial)")) %>%
+      autofit()
+
+
+test.string = "Gemma.6mpf - Gemma.3mpf"
+
+a <- summary(multcomp::glht(mod, linfct = mcp(Diet.Time = "Tukey")), p.adjust.methods = "BH") %>% 
+      tidy()
+
+a %>% separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(term, group1, group2, statistic, adj.p.value) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = colnames(mod[["model"]][1]), .after = "term")
+
+
+
+
+```
+

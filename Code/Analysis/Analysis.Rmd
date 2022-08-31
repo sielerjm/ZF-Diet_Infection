@@ -1,0 +1,1038 @@
+---
+title: "Zebrafish Diet & Infection: Figures"
+author: "Michael Sieler"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: united
+    highlight: tango
+  pdf_document: 
+    toc: yes
+    toc_depth: '3'
+    
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+# Set project path to project level
+proj.path <- paste0(getwd(), "/../../")
+
+# Source Plot Settings
+source(paste0(proj.path,"/Code/Functions/StartFunctions/plot_settings.R"))
+
+
+```
+
+<!-- # Main Figures -->
+
+## Diet
+
+```{r}
+
+data <- df.T0
+data.alpha <- dt.alphaPlus.T0.melt
+ps.obj <- ps.T0
+dist <- distList.T0
+
+levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
+data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+```
+
+
+### Physiology
+
+#### Weight
+
+
+```{r Diet-Physio-Weight}
+
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Weight ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+Fig.1.a <- 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Weight
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Diet",
+      y = "Weight (mg)"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(325, 510, 425)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 525)) + 
+  theme(legend.position = "none")
+
+
+Fig.1.a
+
+test %>% 
+  flextable() 
+
+```
+
+#### Body Condition Score
+
+```{r Diet-Physio-BCS}
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+
+Fig.1.b <- 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Body.Condition.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(2.75, 3, 3.25)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(1, 3.25)) + 
+  theme(legend.position = "none")
+
+Fig.1.b
+
+test %>% 
+  flextable() 
+
+```
+
+### Alpha Diversity
+
+#### Diets
+
+```{r Diet-Alpha-Diets}
+# library(multcomp)
+# Source: https://stats.stackexchange.com/a/60361
+# Source: https://cran.r-project.org/web/packages/multcomp/vignettes/multcomp-examples.pdf
+
+test <- 
+  summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Diet, 
+                             data = data.alpha %>% filter(Alpha.Metric == "Shannon"),
+                             family = "quasibinomial"), 
+                             linfct = mcp(Diet = "Tukey")) ) %>% 
+  tidy() %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1)
+
+
+test.p <- test %>% as_tibble() %>% 
+  select(`.y.`, group1, group2, p.adj.signif)
+
+
+Fig.1.c <- 
+  data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x = Diet, 
+               y = Alpha.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Set1) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Diet",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(test.p, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(.85, .95, 1.1)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 1.1)) + 
+  theme(legend.position = "none")
+
+
+Fig.1.c
+
+
+# Statistics Table
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
+  autofit()
+
+```
+
+### Beta Diversity
+
+#### Diets
+
+```{r Diet-Beta-Diets}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP1)
+cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+
+
+
+Fig.1.d <-
+  dt.ord.full.beta$`Bray-Curtis`$sample.coords %>%
+    ggplot(aes(x = CAP1, y = CAP2)) +
+      stat_ellipse(aes(color = Diet)) +
+      geom_point(aes(color = Diet),
+                 size = 2.5,
+                 alpha = 1
+                 ) +
+      # geom_segment(
+      #     data = dt.ord.full.beta$`Bray-Curtis`$vector.coords, 
+      #     aes(x = 0, 
+      #         y = 0, 
+      #         xend = CAP1, 
+      #         yend = CAP2),
+      #     color = "black",
+      #     arrow = arrow(length = unit(0.05, "npc"))
+      # ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, 
+               y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(values = pal.Dark2) +
+      scale_color_manual(values = pal.Dark2)  + 
+      labs(x = dt.ord.full.beta$`Bray-Curtis`$axes.labs[1], 
+           y = dt.ord.full.beta$`Bray-Curtis`$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+
+
+Fig.1.d
+
+stats_table(anova)
+
+```
+
+
+
+## Development
+
+```{r}
+
+data <- df.conT0T1
+data.alpha <- dt.alphaPlus.conT0T1.melt
+ps.obj <- ps.conT0T1
+dist <- distList.conT0T1
+
+levels(data.alpha$Timepoint) <- factor(levels(data.alpha$Timepoint), levels = c("3mpf", "6mpf"))
+data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "3mpf")
+
+```
+
+### Alpha Diversity
+
+#### Time
+
+```{r Dev-Alpha-Time}
+
+test <- 
+  summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Timepoint, 
+                             data = data.alpha %>% filter(Alpha.Metric == "Shannon"),
+                             family = "quasibinomial"), 
+                             linfct = mcp(Timepoint = "Tukey")) ) %>% 
+  tidy() %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1)
+
+
+test.p <- test %>% as_tibble() %>% 
+  select(`.y.`, group1, group2, p.adj.signif)
+
+
+Fig.2.a <-
+  data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x = Timepoint, 
+               y = Alpha.Score
+               )) +
+    geom_boxplot(aes(fill = Timepoint)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Dark2[c(6,4)]) +
+    scale_color_manual(values = pal.Dark2[c(6,4)]) +
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Time",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(test.p, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(1.075)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(0, 1.1)) +
+  theme(legend.position = "none")
+
+Fig.2.a
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Time), family = quasibinomial)")) %>%
+  autofit()
+
+```
+
+#### Time:Diets
+
+
+```{r Dev-Alpha-TimeDiets}
+
+test <- data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+  group_by(Diet) %>%
+  nest(data = -Diet) %>%
+  mutate(test = map(.x=data, 
+                    ~summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Timepoint, 
+                         data = .x,
+                         family = "quasibinomial"), 
+                         linfct = mcp(Timepoint = "Tukey")) )%>% tidy
+                    )) %>%
+  unnest(test) %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(data, null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1) %>%
+  arrange(Diet)
+
+
+test.p <- test %>% as_tibble() %>% 
+  select(Diet, `.y.`, group1, group2, p.adj.signif)
+
+
+Fig.2.b <-
+  data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x = Timepoint, 
+               y = Alpha.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Set1) +
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Time",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(test.p, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(.95, .95, 1.075)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(0, 1.1)) +
+  theme(legend.position = "none")
+
+Fig.2.b
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Time), family = quasibinomial)")) %>%
+  autofit()
+
+
+```
+
+### Beta Diversity
+
+#### Diets
+
+```{r Dev-Beta-Diets}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+
+
+
+Fig.2.c <-
+  dt.ord.full.beta$`Bray-Curtis`$sample.coords %>%
+    ggplot(aes(x = CAP1, y = CAP2)) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet),
+                 size = 2.5,
+                 alpha = 1) +
+      # geom_segment(
+      #     data = dt.ord.full.beta$`Bray-Curtis`$vector.coords, 
+      #     aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
+      #     color = "black",
+      #     arrow = arrow(length = unit(0.05, "npc"))
+      # ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(values = pal.Dark2) +
+      scale_color_manual(values = pal.Dark2)  + 
+      labs(x = dt.ord.full.beta$`Bray-Curtis`$axes.labs[1], 
+           y = dt.ord.full.beta$`Bray-Curtis`$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+
+
+Fig.2.c
+
+stats_table(anova)
+
+
+```
+
+
+
+#### Time
+
+```{r Dev-Beta-Time}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Timepoint"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+p.val <- anova$p.value[anova$metric == "Canberra"][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$MDS1)
+cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP1)
+
+
+
+Fig.2.d <-
+  dt.ord.full.beta$`Canberra`$sample.coords %>%
+    ggplot(aes(x = CAP1, y = MDS1)) +
+      stat_ellipse(aes(color = Timepoint )) +
+      geom_point(aes(color = Timepoint),
+                 size = 2.5,
+                 alpha = 1) +
+      # geom_segment(
+      #     data = dt.ord.full.beta$`Canberra`$vector.coords, 
+      #     aes(x = 0, 
+      #         y = 0, 
+      #         xend = CAP1, 
+      #         yend = MDS1),
+      #     color = "black",
+      #     arrow = arrow(length = unit(0.05, "npc"))
+      # ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Time", values = pal.Dark2[c(6,4)]) +
+      scale_color_manual(name = "Time", values = pal.Dark2[c(6,4)])  + 
+      labs(x = dt.ord.full.beta$`Canberra`$axes.labs[1], 
+           y = dt.ord.full.beta$`Canberra`$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+
+
+Fig.2.d
+
+stats_table(anova)
+
+```
+
+
+#### Diets:Time
+```{r Dev-Beta-Diets}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet", "Timepoint"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+stats_table(anova)
+
+```
+
+
+
+### Physiology
+
+#### Body Condition Score
+
+```{r Dev-Physio-BCS}
+
+test <- data %>%
+  # filter(Alpha.Metric == "Shannon") %>%
+  group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Timepoint) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+
+Fig.2.e <-
+  data %>%
+  # filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x = Timepoint, 
+               y = Body.Condition.Score
+               )) +
+    geom_boxplot(aes(fill = Timepoint)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Dark2[c(6,4)]) +
+    scale_color_manual(values = pal.Set1) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Time",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(2.65, 2.75, 3.55)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 3.75)) + 
+  theme(legend.position = "none")
+
+Fig.2.e
+
+test %>% 
+  flextable() 
+
+```
+
+
+#### ZIRC Body Condition Score:Alpha Diversity
+
+```{r}
+
+test <- data.alpha %>%
+  filter(Alpha.Metric == "Shannon" & Diet == "ZIRC") %>%
+  # group_by(Diet) %>%
+  rstatix::anova_test(data =., Body.Condition.Score ~ Alpha.Score) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+plot.label <- paste0("DF = ", test$DFd,"; F = ", test$`F`, "; P = ", test$p.adj)
+
+
+Fig.2.f <-
+  data.alpha %>%
+  filter(Alpha.Metric == "Shannon" & Diet == "ZIRC") %>%
+    ggplot(aes(y = Alpha.Score, 
+               x = Body.Condition.Score)
+           ) +
+    geom_smooth(aes(color = Diet, 
+                    fill = Diet), 
+                method = "lm") +
+    geom_point(size = 2.5) +
+    # facet_grid(. ~ Diet, scale = "free") +
+    annotate("text", 
+               label = plot.label,
+               x = 3.5, y = 0.05, 
+               size = 5, 
+               color = "black",
+               hjust = 1
+      ) +
+    scale_fill_manual(values = pal.Dark2[3]) +
+    scale_color_manual(values = pal.Dark2[3]) + 
+    labs(
+      # title = "",
+      # caption = "",
+      y = "Alpha Score (normalized)",
+      x = "Body Condition Score"
+    ) +
+    theme(legend.position = "none")
+
+Fig.2.f
+
+
+test %>% 
+  flextable() 
+
+```
+
+
+
+## Pathogen Exposure
+
+```{r}
+
+data <- df.all
+data.alpha <- dt.alphaPlus.all.melt
+data.beta <- df.T1
+ps.obj <- ps.all
+dist <- distList.T1
+
+# Relevel
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Exposed", "Unexposed"))
+sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+
+
+```
+
+### Alpha Diversity
+
+#### Exposure
+
+```{r Path-Alpha-Exp}
+
+test <- data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Alpha.Score ~ PrePostExp) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+
+Fig.3.a <-
+  data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Exposed", "Unexposed")),
+               y = Alpha.Score,
+               )) +
+    geom_boxplot(aes(fill = PrePostExp)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+    scale_color_manual(values = pal.Set1[c(4,1,2)]) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Treatment",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(1, 1.1,1.2)
+                               ) +
+    scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
+                       limits = c(0, 1.2)) + 
+  theme(legend.position = "none")
+
+Fig.3.a
+
+test %>% 
+  flextable() 
+
+```
+
+#### Exposure:Diets
+
+```{r Path-Alpha-ExpDiets, fig.width = 5, fig.height = 2.5}
+
+test <- data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+  group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Alpha.Score ~ PrePostExp) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+
+Fig.3.b <-
+  data.alpha %>%
+  filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Exposed", "Unexposed")),
+               y = Alpha.Score,
+               )) +
+    geom_boxplot(aes(fill = PrePostExp)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+    scale_color_manual(values = pal.Set1[c(4,1,2)]) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Treatment",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(1, 1.1,1.2)
+                               ) +
+    scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
+                       limits = c(0, 1.2)) + 
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = .5))
+
+Fig.3.b
+
+test %>% 
+  flextable() 
+
+```
+
+
+### Beta Diversity
+
+#### Exposure
+
+```{r Path-Beta-Exp}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("PrePostExp"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$MDS1)
+cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP1)
+
+
+
+Fig.3.c <-
+  dt.ord.full.beta$`Bray-Curtis`$sample.coords %>%
+    ggplot(aes(x = CAP1, y = MDS1)) +
+      stat_ellipse(aes(color = PrePostExp )) +
+      # stat_ellipse(aes(linetype = Diet )) +
+      geom_point(aes(color = PrePostExp,
+                     shape = Diet),
+                 size = 2.5,
+                 alpha = 1 ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Treatment", values = pal.Set1[c(1,2)]) +
+      scale_color_manual(name = "Treatment", values = pal.Set1[c(1,2)])  + 
+      scale_linetype_manual(name = "Diet", values = c("dashed", "solid", "dotted")) +
+      labs(x = dt.ord.full.beta$`Bray-Curtis`$axes.labs[1], 
+           y = dt.ord.full.beta$`Bray-Curtis`$axes.labs[2]) + 
+      theme(legend.position = "bottom") 
+
+Fig.3.c
+
+```
+
+#### Diets
+
+##### Bray-Curtis
+
+```{r}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+
+
+
+Fig.3.d <-
+  dt.ord.full.beta$`Bray-Curtis`$sample.coords %>%
+    ggplot(aes(x = CAP1, y = CAP2)) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet,
+                     shape = PrePostExp),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(values = pal.Dark2) +
+      scale_color_manual(values = pal.Dark2)  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(x = dt.ord.full.beta$`Bray-Curtis`$axes.labs[1], 
+           y = dt.ord.full.beta$`Bray-Curtis`$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+
+Fig.3.d
+
+stats_table(anova)
+
+```
+
+
+
+
+
+
+### Differential Abundance
+
+```{r}
+
+data.da <- 
+  df_sig %>%
+    filter(Taxon == "Mycobacterium") %>%
+    mutate(value = exp(value)) 
+
+
+
+```
+
+
+#### Exposure:Diets
+
+```{r Path-DA-ExpDiets}
+
+test <- data.da %>%
+  group_by(Diet) %>%
+  filter(Taxon == "Mycobacterium") %>%
+  rstatix::wilcox_test(data =., value ~ PrePostExp) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj") %>%
+  mutate(p.adj.signif = case_when(`p.adj.signif` == "*" ~ "*",
+                                  `p.adj.signif` == "**" ~ "*",
+                                  `p.adj.signif` == "***" ~ "*",
+                                  `p.adj.signif` == "****" ~ "*",
+                                  `p.adj.signif` == "ns" ~ "ns"))
+
+Fig.3.e <- 
+  data.da %>%
+  # filter(Alpha.Metric == "Shannon") %>%
+    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Exposed", "Unexposed")),
+               y = log(value),
+               )) +
+    geom_boxplot(aes(fill = PrePostExp)) +
+    geom_quasirandom(size = .75) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = pal.Set1[c(2,1,4)]) +
+    scale_color_manual(values = pal.Set1[c(2,1,4)]) + 
+    scale_x_discrete(labels=c('Pre', 'Exp', 'Une')) +
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Treatment",
+      y = "Abundance (log transformed)"
+    ) +
+    ggpubr::stat_pvalue_manual(test,
+                               label = "p.adj.signif",
+                               size = 6,
+                               bracket.size = .75,
+                               y.position = c(7.25, 6.5, 5.75,
+                                              6.5, 7.75, 7,
+                                              7.25, 6.5, 5.75),
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(-.55, 8)) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = .5))
+
+Fig.3.e
+
+test %>% 
+  flextable() 
+
+
+
+```
+
+
+```{r}
+
+res_global.EXP %>%
+  tibble::rownames_to_column("Taxon") %>%
+  filter(Taxon == "Mycobacterium") %>% 
+  flextable() %>%
+  align(j = 1:5, align = "right") %>%
+  colformat_double(j = 2, digits = 3) %>%
+  colformat_double(j = 3:4, digits = 4) %>%
+  set_formatter(values = list("p_val" = p_val_format,
+                              "q_val" = p_val_format) )
+
+```
+

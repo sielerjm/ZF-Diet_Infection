@@ -276,11 +276,11 @@ tax.data = taxa.data.table(tax.level)
 
 
 out = ancombc(phyloseq = tax.level, 
-              formula = "Diet.Exp", 
+              formula = "Diet*PrePostExp", 
               p_adj_method = "BH", 
               # lib_cut = 0, 
               # prv_cut = 0,
-              group = "Diet.Exp", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+              group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
               # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
               neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
               tol = 1e-05, 

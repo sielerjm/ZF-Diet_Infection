@@ -236,6 +236,99 @@ distList.conT1.ZIRC <- gen.dist.matrices(subset_samples(ps.conT1, Diet == "ZIRC"
 
 
 ## Diet --------------------------------------------------------------------
+pseq = ps.conT0T1
+data = dt.conT0T1
+
+# Relevel
+
+
+levels(data$Timepoint) <- factor(levels(data$Timepoint), levels = c("3pmf", "6mpf"))
+data$Timepoint <- relevel(factor(data$Timepoint), ref = "3mpf")
+
+levels(sample_data(pseq)$Timepoint) <- factor(levels(sample_data(pseq)$Timepoint),levels = c("3pmf", "6mpf"))
+sample_data(pseq)$Timepoint <- relevel(factor(sample_data(pseq)$Timepoint), ref = "3mpf")
+
+# ADD INTERACTION
+sample_data(pseq) <- microbiome::meta(pseq) %>%
+  mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age) 
+
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age)
+
+# Sanity check counts are correct
+
+microbiome::meta(pseq) %>%
+  group_by(Diet.Time) %>%
+  count()
+
+
+# Genus level data
+Genus_data = microbiome::aggregate_taxa(pseq, "Genus")
+
+
+tax.level = Genus_data #phylum_data
+tax.label = "Genus"
+tax.data = taxa.data.table(tax.level)
+
+
+out = ancombc(phyloseq = tax.level, 
+              formula = "Diet*Timepoint", 
+              p_adj_method = "BH", 
+              # lib_cut = 0, 
+              # prv_cut = 0,
+              group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+              # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+              neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+              tol = 1e-05, 
+              max_iter = 100,
+              conserve = T, 
+              alpha = 0.05, 
+              global = T
+              #assay_name = "counts"
+)
+
+res.TIME = out$res
+res_global.TIME = out$res_global
+
+
+
+# Global
+
+tab_w = res_global.TIME[, "W", drop = FALSE]
+tab_p = res_global.TIME[, "p_val", drop = FALSE]
+tab_q = res_global.TIME[, "q_val", drop = FALSE]
+tab_diff = res_global.TIME[, "diff_abn", drop = FALSE]
+
+
+# Log transform
+
+samp_frac = out$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.level) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig.TIME = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+                     dplyr::select(Sample, Diet, Timepoint, Diet.Time),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet", "Timepoint", "Diet.Time"), 
+                      names_to = "Taxon", values_to = "value")
+
+
 
 
 ## Exposure ----------------------------------------------------------------
@@ -331,5 +424,471 @@ df_sig.EXP = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
   dplyr::filter(!is.na(Diet)) %>%
   tidyr::pivot_longer(cols = -one_of("Sample", "Diet", "PrePostExp", "Diet.Exp"), 
                       names_to = "Taxon", values_to = "value")
+
+
+
+
+
+## Diet:Time -----------------------------------------------------------
+
+# Load Data
+
+pseq.Gemma = ps.conT0T1 %>% subset_samples(Diet == "Gemma")
+data.Gemma = dt.conT0T1 %>% subset(Diet == "Gemma")
+
+pseq.Watts = ps.conT0T1 %>% subset_samples(Diet == "Watts")
+data.Watts = dt.conT0T1 %>% subset(Diet == "Watts")
+
+pseq.ZIRC = ps.conT0T1 %>% subset_samples(Diet == "ZIRC")
+data.ZIRC = dt.conT0T1 %>% subset(Diet == "ZIRC")
+
+
+
+# Genus level data
+Genus_data.Gemma = aggregate_taxa(pseq.Gemma, "Genus")
+# Family level data
+Family_data.Gemma = aggregate_taxa(pseq.Gemma, "Family")
+# Phylum level data
+Phylum_data.Gemma = aggregate_taxa(pseq.Gemma, "Phylum")
+
+# Genus level data
+Genus_data.Watts = aggregate_taxa(pseq.Watts, "Genus")
+# Family level data
+Family_data.Watts = aggregate_taxa(pseq.Watts, "Family")
+# Phylum level data
+Phylum_data.Watts = aggregate_taxa(pseq.Watts, "Phylum")
+
+# Genus level data
+Genus_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Genus")
+# Family level data
+Family_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Family")
+# Phylum level data
+Phylum_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Phylum")
+
+# Run Ancom
+
+tax.label = "Genus"
+
+tax.level.Gemma = Genus_data.Gemma 
+tax.data.Gemma = taxa.data.table(tax.level.Gemma)
+
+tax.level.Watts = Genus_data.Watts 
+tax.data.Watts = taxa.data.table(tax.level.Watts)
+
+tax.level.ZIRC = Genus_data.ZIRC 
+tax.data.ZIRC = taxa.data.table(tax.level.ZIRC)
+
+# Genus_ Phylum_ Family_
+
+# Gemma
+
+out.Gemma = ancombc(phyloseq = tax.level.Gemma, 
+                    formula = "Timepoint", 
+                    p_adj_method = "BH", 
+                    # lib_cut = 0, 
+                    # prv_cut = 0,
+                    # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+                    # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+                    neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+                    tol = 1e-05, 
+                    max_iter = 100,
+                    conserve = T, 
+                    alpha = 0.05, 
+                    # global = T
+                    #assay_name = "counts"
+)
+
+res.Gemma = out.Gemma$res
+res_global.Gemma = out.Gemma$res_global
+
+
+# Watts
+
+out.Watts = ancombc(phyloseq = tax.level.Watts, 
+                    formula = "Timepoint", 
+                    p_adj_method = "BH", 
+                    # lib_cut = 0, 
+                    # prv_cut = 0,
+                    # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+                    # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+                    neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+                    tol = 1e-05, 
+                    max_iter = 100,
+                    conserve = T, 
+                    alpha = 0.05, 
+                    # global = T
+                    #assay_name = "counts"
+)
+
+res.Watts = out.Watts$res
+res_global.Watts = out.Watts$res_global
+
+
+# ZIRC
+
+out.ZIRC = ancombc(phyloseq = tax.level.ZIRC, 
+                   formula = "Timepoint", 
+                   p_adj_method = "BH", 
+                   # lib_cut = 0, 
+                   # prv_cut = 0,
+                   # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+                   # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+                   neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+                   tol = 1e-05, 
+                   max_iter = 100,
+                   conserve = T, 
+                   alpha = 0.05, 
+                   # global = T
+                   #assay_name = "counts"
+)
+
+res.ZIRC = out.ZIRC$res
+res_global.ZIRC = out.ZIRC$res_global
+
+
+
+# Gemma
+
+lfc.Gemma <- list()
+
+lfc.Gemma$tab_lfc = res.Gemma$lfc
+lfc.Gemma$tab_se = res.Gemma$se
+lfc.Gemma$tab_p = res.Gemma$p_val
+lfc.Gemma$tab_diff = res.Gemma$diff_abn
+
+lfc.Gemma$df_lfc = data.frame(lfc.Gemma$tab_lfc * lfc.Gemma$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+lfc.Gemma$df_se = data.frame(lfc.Gemma$tab_se * lfc.Gemma$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(lfc.Gemma$df_se)[-1] = paste0(colnames(lfc.Gemma$df_se)[-1], "SE")
+
+lfc.Gemma$df_lfc <- 
+  lfc.Gemma$df_lfc %>%
+  rename(Gemma.6mpf = Timepoint6mpf)
+
+lfc.Gemma$df_se <- 
+  lfc.Gemma$df_se %>%
+  rename(Gemma.6mpf = Timepoint6mpfSE)
+
+# Watts
+
+lfc.Watts <- list()
+
+lfc.Watts$tab_lfc = res.Watts$lfc
+lfc.Watts$tab_se = res.Watts$se
+lfc.Watts$tab_p = res.Watts$p_val
+lfc.Watts$tab_diff = res.Watts$diff_abn
+
+lfc.Watts$df_lfc = data.frame(lfc.Watts$tab_lfc * lfc.Watts$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+lfc.Watts$df_se = data.frame(lfc.Watts$tab_se * lfc.Watts$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(lfc.Watts$df_se)[-1] = paste0(colnames(lfc.Watts$df_se)[-1], "SE")
+
+lfc.Watts$df_lfc <- 
+  lfc.Watts$df_lfc %>%
+  rename(Watts.6mpf = Timepoint6mpf)
+
+lfc.Watts$df_se <- 
+  lfc.Watts$df_se %>%
+  rename(Watts.6mpf = Timepoint6mpfSE)
+
+# ZIRC
+
+lfc.ZIRC <- list()
+
+lfc.ZIRC$tab_lfc = res.ZIRC$lfc
+lfc.ZIRC$tab_se = res.ZIRC$se
+lfc.ZIRC$tab_p = res.ZIRC$p_val
+lfc.ZIRC$tab_diff = res.ZIRC$diff_abn
+
+lfc.ZIRC$df_lfc = data.frame(lfc.ZIRC$tab_lfc * lfc.ZIRC$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+lfc.ZIRC$df_se = data.frame(lfc.ZIRC$tab_se * lfc.ZIRC$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(lfc.ZIRC$df_se)[-1] = paste0(colnames(lfc.ZIRC$df_se)[-1], "SE")
+
+lfc.ZIRC$df_lfc <- 
+  lfc.ZIRC$df_lfc %>%
+  rename(ZIRC.6mpf = Timepoint6mpf)
+
+lfc.ZIRC$df_se <- 
+  lfc.ZIRC$df_se %>%
+  rename(ZIRC.6mpf = Timepoint6mpfSE)
+
+# Statistical Data Tables
+lfc.time.diets <- list(lfc.Gemma,
+                       lfc.Watts,
+                       lfc.ZIRC) %>% 
+  setNames(c("Gemma", "Watts", "ZIRC"))
+
+
+# Join and Pivot
+
+## DF
+
+df_lfc.dtime<- 
+  lfc.Gemma$df_lfc %>%
+  left_join(lfc.Watts$df_lfc, by = "Taxon_id",  na_matches = "never") %>% 
+  left_join(lfc.ZIRC$df_lfc, by = "Taxon_id",  na_matches = "never") %>% 
+  replace(is.na(.), 0) %>%
+  pivot_longer(cols = 2:4, names_to = "Diet")
+
+## SE
+
+df_se.time <- 
+  lfc.Gemma$df_se %>%
+  left_join(lfc.Watts$df_se, by = "Taxon_id",  na_matches = "never") %>% 
+  left_join(lfc.ZIRC$df_se, by = "Taxon_id",  na_matches = "never") %>% 
+  replace(is.na(.), 0) %>%
+  pivot_longer(cols = 2:4, names_to = "Diet")
+
+
+# df_lfc.diets
+# df_se.diets
+
+
+
+
+
+## Diet:Exposure -----------------------------------------------------------
+
+# Load Data
+
+pseq.Gemma = ps.T1 %>% subset_samples(Diet == "Gemma")
+data.Gemma = dt.T1 %>% subset(Diet == "Gemma")
+
+pseq.Watts = ps.T1 %>% subset_samples(Diet == "Watts")
+data.Watts = dt.T1 %>% subset(Diet == "Watts")
+
+pseq.ZIRC = ps.T1 %>% subset_samples(Diet == "ZIRC")
+data.ZIRC = dt.T1 %>% subset(Diet == "ZIRC")
+
+# Relevel Factors
+
+levels(sample_data(pseq.Gemma)$PrePostExp) <- factor(levels(sample_data(pseq.Gemma)$PrePostExp),levels = c("Unexposed", "Exposed"))
+sample_data(pseq.Gemma)$PrePostExp <- relevel(factor(sample_data(pseq.Gemma)$PrePostExp), ref = "Unexposed")
+
+levels(data.Gemma$PrePostExp) <- factor(levels(data.Gemma$PrePostExp), levels = c("Unexposed", "Exposed"))
+data.Gemma$PrePostExp <- relevel(factor(data.Gemma$PrePostExp), ref = "Unexposed")
+
+levels(sample_data(pseq.Watts)$PrePostExp) <- factor(levels(sample_data(pseq.Watts)$PrePostExp),levels = c("Unexposed", "Exposed"))
+sample_data(pseq.Watts)$PrePostExp <- relevel(factor(sample_data(pseq.Watts)$PrePostExp), ref = "Unexposed")
+
+levels(data.Watts$PrePostExp) <- factor(levels(data.Watts$PrePostExp), levels = c("Unexposed", "Exposed"))
+data.Watts$PrePostExp <- relevel(factor(data.Watts$PrePostExp), ref = "Unexposed")
+
+levels(sample_data(pseq.ZIRC)$PrePostExp) <- factor(levels(sample_data(pseq.ZIRC)$PrePostExp),levels = c("Unexposed", "Exposed"))
+sample_data(pseq.ZIRC)$PrePostExp <- relevel(factor(sample_data(pseq.ZIRC)$PrePostExp), ref = "Unexposed")
+
+levels(data.ZIRC$PrePostExp) <- factor(levels(data.ZIRC$PrePostExp), levels = c("Unexposed", "Exposed"))
+data.ZIRC$PrePostExp <- relevel(factor(data.ZIRC$PrePostExp), ref = "Unexposed")
+
+
+
+# Genus level data
+Genus_data.Gemma = aggregate_taxa(pseq.Gemma, "Genus")
+# Family level data
+Family_data.Gemma = aggregate_taxa(pseq.Gemma, "Family")
+# Phylum level data
+Phylum_data.Gemma = aggregate_taxa(pseq.Gemma, "Phylum")
+
+# Genus level data
+Genus_data.Watts = aggregate_taxa(pseq.Watts, "Genus")
+# Family level data
+Family_data.Watts = aggregate_taxa(pseq.Watts, "Family")
+# Phylum level data
+Phylum_data.Watts = aggregate_taxa(pseq.Watts, "Phylum")
+
+# Genus level data
+Genus_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Genus")
+# Family level data
+Family_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Family")
+# Phylum level data
+Phylum_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Phylum")
+
+# Run Ancom
+
+tax.label = "Genus"
+
+tax.level.Gemma = Genus_data.Gemma 
+tax.data.Gemma = taxa.data.table(tax.level.Gemma)
+
+tax.level.Watts = Genus_data.Watts 
+tax.data.Watts = taxa.data.table(tax.level.Watts)
+
+tax.level.ZIRC = Genus_data.ZIRC 
+tax.data.ZIRC = taxa.data.table(tax.level.ZIRC)
+
+# Genus_ Phylum_ Family_
+
+# Gemma
+
+out.Gemma = ancombc(phyloseq = tax.level.Gemma, 
+                    formula = "PrePostExp", 
+                    p_adj_method = "BH", 
+                    # lib_cut = 0, 
+                    # prv_cut = 0,
+                    # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+                    # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+                    neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+                    tol = 1e-05, 
+                    max_iter = 100,
+                    conserve = T, 
+                    alpha = 0.05, 
+                    # global = T
+                    #assay_name = "counts"
+)
+
+res.Gemma = out.Gemma$res
+res_global.Gemma = out.Gemma$res_global
+
+
+# Watts
+
+out.Watts = ancombc(phyloseq = tax.level.Watts, 
+                    formula = "PrePostExp", 
+                    p_adj_method = "BH", 
+                    # lib_cut = 0, 
+                    # prv_cut = 0,
+                    # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+                    # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+                    neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+                    tol = 1e-05, 
+                    max_iter = 100,
+                    conserve = T, 
+                    alpha = 0.05, 
+                    # global = T
+                    #assay_name = "counts"
+)
+
+res.Watts = out.Watts$res
+res_global.Watts = out.Watts$res_global
+
+
+# ZIRC
+
+out.ZIRC = ancombc(phyloseq = tax.level.ZIRC, 
+                   formula = "PrePostExp", 
+                   p_adj_method = "BH", 
+                   # lib_cut = 0, 
+                   # prv_cut = 0,
+                   # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+                   # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+                   neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+                   tol = 1e-05, 
+                   max_iter = 100,
+                   conserve = T, 
+                   alpha = 0.05, 
+                   # global = T
+                   #assay_name = "counts"
+)
+
+res.ZIRC = out.ZIRC$res
+res_global.ZIRC = out.ZIRC$res_global
+
+# Gemma
+
+lfc.Gemma <- list()
+
+lfc.Gemma$tab_lfc = res.Gemma$lfc
+lfc.Gemma$tab_se = res.Gemma$se
+lfc.Gemma$tab_p = res.Gemma$p_val
+lfc.Gemma$tab_diff = res.Gemma$diff_abn
+
+lfc.Gemma$df_lfc = data.frame(lfc.Gemma$tab_lfc * lfc.Gemma$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+lfc.Gemma$df_se = data.frame(lfc.Gemma$tab_se * lfc.Gemma$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(lfc.Gemma$df_se)[-1] = paste0(colnames(lfc.Gemma$df_se)[-1], "SE")
+
+lfc.Gemma$df_lfc <- 
+  lfc.Gemma$df_lfc %>%
+  rename(Gemma.Exposed = PrePostExpExposed)
+
+lfc.Gemma$df_se <- 
+  lfc.Gemma$df_se %>%
+  rename(Gemma.Exposed = PrePostExpExposedSE)
+
+# Watts
+
+lfc.Watts <- list()
+
+lfc.Watts$tab_lfc = res.Watts$lfc
+lfc.Watts$tab_se = res.Watts$se
+lfc.Watts$tab_p = res.Watts$p_val
+lfc.Watts$tab_diff = res.Watts$diff_abn
+
+lfc.Watts$df_lfc = data.frame(lfc.Watts$tab_lfc * lfc.Watts$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+lfc.Watts$df_se = data.frame(lfc.Watts$tab_se * lfc.Watts$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(lfc.Watts$df_se)[-1] = paste0(colnames(lfc.Watts$df_se)[-1], "SE")
+
+lfc.Watts$df_lfc <- 
+  lfc.Watts$df_lfc %>%
+  rename(Watts.Exposed = PrePostExpExposed)
+
+lfc.Watts$df_se <- 
+  lfc.Watts$df_se %>%
+  rename(Watts.Exposed = PrePostExpExposedSE)
+
+# ZIRC
+
+lfc.ZIRC <- list()
+
+lfc.ZIRC$tab_lfc = res.ZIRC$lfc
+lfc.ZIRC$tab_se = res.ZIRC$se
+lfc.ZIRC$tab_p = res.ZIRC$p_val
+lfc.ZIRC$tab_diff = res.ZIRC$diff_abn
+
+lfc.ZIRC$df_lfc = data.frame(lfc.ZIRC$tab_lfc * lfc.ZIRC$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+lfc.ZIRC$df_se = data.frame(lfc.ZIRC$tab_se * lfc.ZIRC$tab_diff, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(lfc.ZIRC$df_se)[-1] = paste0(colnames(lfc.ZIRC$df_se)[-1], "SE")
+
+lfc.ZIRC$df_lfc <- 
+  lfc.ZIRC$df_lfc %>%
+  rename(ZIRC.Exposed = PrePostExpExposed)
+
+lfc.ZIRC$df_se <- 
+  lfc.ZIRC$df_se %>%
+  rename(ZIRC.Exposed = PrePostExpExposedSE)
+
+# Statistical Data Tables
+lfc.exp.diets <- list(lfc.Gemma,
+                      lfc.Watts,
+                      lfc.ZIRC) %>% 
+  setNames(c("Gemma", "Watts", "ZIRC"))
+
+
+# Join and Pivot
+
+## DF
+
+df_lfc.exp<- 
+  lfc.Gemma$df_lfc %>%
+  left_join(lfc.Watts$df_lfc, by = "Taxon_id",  na_matches = "never") %>% 
+  left_join(lfc.ZIRC$df_lfc, by = "Taxon_id",  na_matches = "never") %>% 
+  replace(is.na(.), 0) %>%
+  pivot_longer(cols = 2:4, names_to = "Diet")
+
+## SE
+
+df_se.exp <- 
+  lfc.Gemma$df_se %>%
+  left_join(lfc.Watts$df_se, by = "Taxon_id",  na_matches = "never") %>% 
+  left_join(lfc.ZIRC$df_se, by = "Taxon_id",  na_matches = "never") %>% 
+  replace(is.na(.), 0) %>%
+  pivot_longer(cols = 2:4, names_to = "Diet")
+
+
+
+
+
+
+
+# End of doc ---------------------------------------------------------------------
 
 

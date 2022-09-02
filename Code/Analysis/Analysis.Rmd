@@ -56,6 +56,8 @@ data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
 
 #### Weight
 
+##### Diet
+
 
 ```{r Diet-Physio-Weight}
 
@@ -100,13 +102,66 @@ test %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("p" = p_val_format,
                               "p.adj" = p_val_format) ) %>%
-  set_caption(paste0("Wilcoxon Testp. adj: BH. Weight ~ Diet")) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Diet")) %>%
+  autofit()
+
+
+```
+
+##### (SM) Sex
+
+```{r Sex-Physio-Weight}
+
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Weight ~ Sex) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+Supp.Fig.1.a <- 
+  data %>%
+    ggplot(aes(x = Sex, 
+               y = Weight
+               )) +
+    geom_boxplot(aes(fill = Sex)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Diet",
+      y = "Weight (mg)"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(500)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 525)) + 
+  theme(legend.position = "none")
+
+
+Supp.Fig.1.a
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Sex")) %>%
   autofit()
 
 
 ```
 
 #### Body Condition Score
+
+##### Diet
 
 ```{r Diet-Physio-BCS}
 test <- data %>%
@@ -150,8 +205,59 @@ test %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("p" = p_val_format,
                               "p.adj" = p_val_format) ) %>%
-  set_caption(paste0("Wilcoxon Testp. adj: BH. Body.Condition.Score ~ Diet")) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Diet")) %>%
   autofit()
+
+```
+
+##### (SM) Sex
+
+```{r Sex-Physio-Weight}
+
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Sex) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+Supp.Fig.1.b <- 
+  data %>%
+    ggplot(aes(x = Sex, 
+               y = Body.Condition.Score
+               )) +
+    geom_boxplot(aes(fill = Sex)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(4)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 4)) + 
+  theme(legend.position = "none")
+
+
+Supp.Fig.1.b
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Sex")) %>%
+  autofit()
+
 
 ```
 
@@ -160,13 +266,14 @@ test %>%
 #### Diets
 
 ```{r Diet-Alpha-Diets}
+
 # library(multcomp)
 # Source: https://stats.stackexchange.com/a/60361
 # Source: https://cran.r-project.org/web/packages/multcomp/vignettes/multcomp-examples.pdf
 
-test <- 
+tukey.test.list <- lapply(methods.alpha, function(alpha){
   summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Diet, 
-                             data = data.alpha %>% filter(Alpha.Metric == "Simpson"),
+                             data = data.alpha %>% filter(Alpha.Metric == alpha),
                              family = "quasibinomial"), 
                              linfct = mcp(Diet = "Tukey")) ) %>% 
   tidy() %>%
@@ -175,12 +282,15 @@ test <-
   rename(p.adj = adj.p.value) %>%
   mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
                                   p.adj >= 0.05 ~ "ns")) %>%
-  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1)
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
 
-
-test.p <- test %>% as_tibble() %>% 
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
   select(`.y.`, group1, group2, p.adj.signif)
-
+})
 
 Fig.1.c <- 
   data.alpha %>%
@@ -198,7 +308,7 @@ Fig.1.c <-
       x = "Diet",
       y = "Alpha Score (normalized)"
     ) +
-    ggpubr::stat_pvalue_manual(test.p, 
+    ggpubr::stat_pvalue_manual(plot.sig.labs[["Simpson"]], 
                                label = "p.adj.signif", 
                                size = 6,
                                bracket.size = 1,
@@ -211,13 +321,53 @@ Fig.1.c <-
 Fig.1.c
 
 
-# Statistics Table
-test %>% 
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Diet",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Time), family = quasibinomial)"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet), family = quasibinomial) )")) %>%
+    autofit()
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
   flextable() %>%
   align(j = 3:6, align = "right") %>%
   colformat_double(j = 6:9, digits = 3) %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
   set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
   autofit()
 
@@ -291,10 +441,70 @@ Fig.1.d <-
 
 Fig.1.d
 
-stats_table(anova)
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet"))
 
 ```
 
+#### (SM) Beta-Dispersion
+
+```{r}
+
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+```
+
+
+##### Diet
+
+```{r}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist[1:2], function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist[1:2], function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% boxplot()
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+```
 
 
 ## Development
@@ -317,9 +527,10 @@ data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "3mpf")
 
 ```{r Dev-Alpha-Time}
 
-test <- 
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
   summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Timepoint, 
-                             data = data.alpha %>% filter(Alpha.Metric == "Shannon"),
+                             data = data.alpha %>% filter(Alpha.Metric == alpha),
                              family = "quasibinomial"), 
                              linfct = mcp(Timepoint = "Tukey")) ) %>% 
   tidy() %>%
@@ -328,11 +539,15 @@ test <-
   rename(p.adj = adj.p.value) %>%
   mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
                                   p.adj >= 0.05 ~ "ns")) %>%
-  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1)
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
 
-
-test.p <- test %>% as_tibble() %>% 
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
   select(`.y.`, group1, group2, p.adj.signif)
+})
 
 
 Fig.2.a <-
@@ -352,7 +567,7 @@ Fig.2.a <-
       x = "Time",
       y = "Alpha Score (normalized)"
     ) +
-    ggpubr::stat_pvalue_manual(test.p, 
+    ggpubr::stat_pvalue_manual(plot.sig.labs[["Shannon"]], 
                                label = "p.adj.signif", 
                                size = 6,
                                bracket.size = 1,
@@ -364,13 +579,55 @@ Fig.2.a <-
 
 Fig.2.a
 
-test %>% 
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Timepoint",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(2,4), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Time), family = quasibinomial)"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Time), family = quasibinomial) )")) %>%
+    autofit()
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
   flextable() %>%
   align(j = 3:6, align = "right") %>%
   colformat_double(j = 6:9, digits = 3) %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
-  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Time), family = quasibinomial)")) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Timepoint), family = quasibinomial)")) %>%
   autofit()
 
 ```
@@ -380,28 +637,35 @@ test %>%
 
 ```{r Dev-Alpha-TimeDiets}
 
-test <- data.alpha %>%
-  filter(Alpha.Metric == "Shannon") %>%
-  group_by(Diet) %>%
-  nest(data = -Diet) %>%
-  mutate(test = map(.x=data, 
-                    ~summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Timepoint, 
-                         data = .x,
-                         family = "quasibinomial"), 
-                         linfct = mcp(Timepoint = "Tukey")) )%>% tidy
-                    )) %>%
-  unnest(test) %>%
-  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
-  select(-c(data, null.value)) %>%
-  rename(p.adj = adj.p.value) %>%
-  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
-                                  p.adj >= 0.05 ~ "ns")) %>%
-  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1) %>%
-  arrange(Diet)
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  test <- data.alpha %>%
+    filter(Alpha.Metric == alpha) %>%
+    group_by(Diet) %>%
+    nest(data = -Diet) %>%
+    mutate(test = map(.x=data, 
+                      ~summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Timepoint, 
+                           data = .x,
+                           family = "quasibinomial"), 
+                           linfct = mcp(Timepoint = "Tukey")) )%>% tidy
+                      )) %>%
+    unnest(test) %>%
+    separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+    select(-c(data, null.value)) %>%
+    rename(p.adj = adj.p.value) %>%
+    mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                    p.adj >= 0.05 ~ "ns")) %>%
+    mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+    arrange(Diet)%>%
+  mutate(metric = alpha, .before = 1)
+})
 
 
-test.p <- test %>% as_tibble() %>% 
+
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
   select(Diet, `.y.`, group1, group2, p.adj.signif)
+})
 
 
 Fig.2.b <-
@@ -421,7 +685,7 @@ Fig.2.b <-
       x = "Time",
       y = "Alpha Score (normalized)"
     ) +
-    ggpubr::stat_pvalue_manual(test.p, 
+    ggpubr::stat_pvalue_manual(plot.sig.labs[["Shannon"]], 
                                label = "p.adj.signif", 
                                size = 6,
                                bracket.size = 1,
@@ -433,15 +697,55 @@ Fig.2.b <-
 
 Fig.2.b
 
-test %>% 
-  select(-c(`.y.`, term)) %>%
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Diet*Timepoint",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
   flextable() %>%
-  align(j = 1:3, align = "left") %>%
-  colformat_double(j = 4:7, digits = 3) %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(6, 12), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Diet*Time), family = quasibinomial)"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet*Time), family = quasibinomial) )")) %>%
+    autofit()
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
   merge_v(j = 1) %>%
-  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
-  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet:Time), family = quasibinomial)")) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Timepoint), family = quasibinomial)")) %>%
   autofit()
 
 
@@ -510,7 +814,8 @@ Fig.2.c <-
 
 Fig.2.c
 
-stats_table(anova)
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet"))
 
 
 ```
@@ -582,12 +887,13 @@ Fig.2.d <-
 
 Fig.2.d
 
-stats_table(anova)
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Time"))
 
 ```
 
 
-#### Diets:Time
+#### (SM) Diets:Time
 ```{r Dev-Beta-Diets}
 
 # Full dbRDA models
@@ -607,10 +913,142 @@ anova <- beta_anova(beta.model = mod,
                     num.cores = num.cores)
 
 
-stats_table(anova)
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet:Time"))
 
 ```
 
+#### (SM) Beta-Dispersion
+
+```{r}
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+```
+
+
+##### Diet
+
+```{r}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist[1:2], function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist[1:2], function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% boxplot()
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+```
+
+
+##### Time
+
+```{r}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist[1:2], function(beta) {
+  betadisper(beta, group = data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist[1:2], function(beta) {
+  betadisper(beta, group = data$Timepoint)  %>% boxplot()
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+```
+
+##### Diet:Time
+
+```{r}
+
+# Add interaction
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age)
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist[1:2], function(beta) {
+  betadisper(beta, group = data$Diet.Time)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist[1:2], function(beta) {
+  betadisper(beta, group = data$Diet.Time)  %>% boxplot()
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    arrange(`p-value`) %>%
+    flextable()
+})
+```
 
 
 ### Physiology
@@ -657,24 +1095,44 @@ Fig.2.e <-
 Fig.2.e
 
 test %>% 
-  flextable() 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Diet:Time")) %>%
+  autofit()
 
 ```
 
 
-#### ZIRC Body Condition Score:Alpha Diversity
+#### ZIRC BCS ~ Alpha Diversity
 
 ```{r}
 
-test <- data.alpha %>%
-  filter(Alpha.Metric == "Shannon" & Diet == "ZIRC") %>%
-  # group_by(Diet) %>%
-  rstatix::anova_test(data =., Body.Condition.Score ~ Alpha.Score) %>%
-  rstatix::adjust_pvalue(method = "BH") %>%
-  rstatix::add_significance("p.adj")
+test.list <- lapply(methods.alpha, function(alpha){
+    glm(formula = Alpha.Score ~ Body.Condition.Score, 
+               data = data.alpha %>% filter(Alpha.Metric == alpha & Diet == "ZIRC"),
+               family = "quasibinomial") %>% 
+  Anova(type = 2) %>%
+  tidy() %>% 
+  mutate(term = c("Body Condition Score (ZIRC)"), 
+         `.y.` = c("Alpha.Score"), 
+         .before = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
 
-plot.label <- paste0("DF = ", test$DFd,"; F = ", test$`F`, "; P = ", test$p.adj)
+# test <- data.alpha %>%
+#   filter(Alpha.Metric == "Shannon" & Diet == "ZIRC") %>%
+#   # group_by(Diet) %>%
+#   rstatix::anova_test(data =., Body.Condition.Score ~ Alpha.Score) %>%
+#   rstatix::adjust_pvalue(method = "BH") %>%
+#   rstatix::add_significance("p.adj")
 
+plot.label <- lapply(methods.alpha, function(alpha){ 
+  paste0("F = ", round(test.list[[alpha]]$statistic, 3), "; P = ", round(test.list[[alpha]]$p.value, 3))
+})
 
 Fig.2.f <-
   data.alpha %>%
@@ -688,7 +1146,7 @@ Fig.2.f <-
     geom_point(size = 2.5) +
     # facet_grid(. ~ Diet, scale = "free") +
     annotate("text", 
-               label = plot.label,
+               label = plot.label[["Shannon"]],
                x = 3.5, y = 0.05, 
                size = 5, 
                color = "black",
@@ -707,11 +1165,138 @@ Fig.2.f <-
 Fig.2.f
 
 
-test %>% 
-  flextable() 
+test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  # align(j = 3:6, align = "right") %>%
+  colformat_double(j = 4, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Timepoint), family = quasibinomial)")) %>%
+  autofit()
 
 ```
 
+#### (SM) ZIRC BetaDiv ~ BCS
+
+
+```{r Dev-Beta-BCS}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Body.Condition.Score","Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# # Plot prep
+# dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+# beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+# beta.axis.full <- axis_labels(dt.ord.full.beta)
+# p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+# p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+# cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+# cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+# 
+# 
+# 
+# Fig.2.c <-
+#   dt.ord.full.beta$`Bray-Curtis`$sample.coords %>%
+#     ggplot(aes(x = CAP1, y = CAP2)) +
+#       stat_ellipse(aes(color = Diet )) +
+#       geom_point(aes(color = Diet),
+#                  size = 2.5,
+#                  alpha = 1) +
+#       # geom_segment(
+#       #     data = dt.ord.full.beta$`Bray-Curtis`$vector.coords, 
+#       #     aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
+#       #     color = "black",
+#       #     arrow = arrow(length = unit(0.05, "npc"))
+#       # ) +
+#       annotate("text", 
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(values = pal.Dark2) +
+#       scale_color_manual(values = pal.Dark2)  + 
+#       labs(x = dt.ord.full.beta$`Bray-Curtis`$axes.labs[1], 
+#            y = dt.ord.full.beta$`Bray-Curtis`$axes.labs[2]) + 
+#       theme(legend.position = "bottom")
+# 
+# 
+# Fig.2.c
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Body.Condition.Score*Diet"))
+
+
+```
+
+
+### Differential Abundance
+
+```{r}
+res_global.TIME %>%
+  tibble::rownames_to_column("Taxon") %>%
+  filter(diff_abn == TRUE) %>%
+  flextable() %>%
+  align(j = 1:5, align = "right") %>%
+  colformat_double(j = 2, digits = 3) %>%
+  colformat_double(j = 3:4, digits = 4) %>%
+  set_formatter(values = list("p_val" = p_val_format,
+                              "q_val" = p_val_format) )
+```
+
+
+#### (SM) Diff Abundance
+
+```{r}
+
+df_fig_time = df_lfc.time %>% 
+  dplyr::left_join(df_se.diets, by = c("Taxon_id", "Diet"), suffix = c("", ".SE")) %>%
+  filter(if_any(contains("value"), ~ . != 0)) %>%
+  dplyr::arrange(desc(value)) %>%
+  dplyr::mutate(direct = ifelse(value > 0, "Positive LFC", "Negative LFC"))
+# df_fig_diets$Taxon_id = df_fig_diets %>%
+#   group_by(Taxon_id, Diet) %>% 
+#   factor(levels = df_fig_diets$Taxon_id)
+df_fig_diets$direct = factor(df_fig_diets$direct, 
+                        levels = c("Positive LFC", "Negative LFC"))
+  
+plot =
+ggplot(data = df_fig_time, 
+           aes(x = reorder(Taxon_id, -value, FUN = mean), y = value, fill = Diet, color = Diet), group = Diet) + 
+  geom_bar(stat = "identity", 
+           position = position_dodge2(width = 1, preserve = "single"), width = .4) +
+  geom_errorbar(aes(ymin = value - value.SE, ymax = value + value.SE), width = 0.4,
+                position = position_dodge2(width = 1, preserve = "single"), color = "black") +
+  labs(x = NULL, y = "Log fold change",
+       title = paste0("Waterfall Plot of Diet:Time (", tax.label, ")")) +
+  scale_fill_manual(values = pal.Dark2) +
+  scale_color_manual(values = pal.Dark2) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(angle = 60, hjust = 1)
+        )
+
+plot
+
+```
 
 
 ## Pathogen Exposure
@@ -721,8 +1306,10 @@ test %>%
 data <- df.all
 data.alpha <- dt.alphaPlus.all.melt
 data.beta <- df.T1
+data.beta2 <- df.all # Includes pre-exposure fish
 ps.obj <- ps.all
 dist <- distList.T1
+dist2 <- distList.all
 data.da <- 
   df_sig %>%
     filter(Taxon == "Mycobacterium") %>%
@@ -737,6 +1324,9 @@ data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-expos
 
 levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
 data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+data.beta2$PrePostExp <- relevel(factor(data.beta2$PrePostExp), ref = "Pre-exposure")
 
 levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Exposed", "Unexposed"))
 sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
@@ -753,9 +1343,9 @@ data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
 
 ```{r Path-Alpha-Exp}
 
-test <- 
+tukey.test.list <- lapply(methods.alpha, function(alpha){
   summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + PrePostExp, 
-                             data = data.alpha %>% filter(Alpha.Metric == "Shannon"),
+                             data = data.alpha %>% filter(Alpha.Metric == alpha),
                              family = "quasibinomial"), 
                              linfct = mcp(PrePostExp = "Tukey")) ) %>% 
   tidy() %>%
@@ -764,11 +1354,17 @@ test <-
   rename(p.adj = adj.p.value) %>%
   mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
                                   p.adj >= 0.05 ~ "ns")) %>%
-  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1)
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
 
 
-test.p <- test %>% as_tibble() %>% 
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
   select(`.y.`, group1, group2, p.adj.signif)
+})
+
 
 
 Fig.3.a <-
@@ -788,7 +1384,7 @@ Fig.3.a <-
       x = "Treatment",
       y = "Alpha Score (normalized)"
     ) +
-    ggpubr::stat_pvalue_manual(test, 
+    ggpubr::stat_pvalue_manual(plot.sig.labs[["Shannon"]], 
                                label = "p.adj.signif", 
                                size = 6,
                                bracket.size = 1,
@@ -800,22 +1396,66 @@ Fig.3.a <-
 
 Fig.3.a
 
-test %>% 
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ PrePostExp",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Exposure), family = quasibinomial)"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    # hline(i = c(2,4), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Exposure), family = quasibinomial) )")) %>%
+    autofit()
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
   flextable() %>%
   align(j = 3:6, align = "right") %>%
   colformat_double(j = 6:9, digits = 3) %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
-  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Treatment), family = quasibinomial)")) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Exposure), family = quasibinomial)")) %>%
   autofit()
+
 ```
 
 #### Exposure:Diets
 
 ```{r Path-Alpha-ExpDiets, fig.width = 10, fig.height = 5}
 
-test <- data.alpha %>%
-  filter(Alpha.Metric == "Shannon") %>%
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  test <- data.alpha %>%
+    filter(Alpha.Metric == alpha) %>%
   group_by(Diet) %>%
   nest(data = -Diet) %>%
   mutate(test = map(.x=data, 
@@ -830,9 +1470,10 @@ test <- data.alpha %>%
   rename(p.adj = adj.p.value) %>%
   mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
                                   p.adj >= 0.05 ~ "ns")) %>%
-  mutate(`.y.` = colnames(mod[["model"]][1]), .after = 1) %>%
-  arrange(Diet)
-
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  arrange(Diet) %>%
+  mutate(metric = alpha, .before = 1)
+})
 
 test.p <- test %>% as_tibble() %>% 
   select(Diet, `.y.`, group1, group2, p.adj.signif)
@@ -870,14 +1511,55 @@ Fig.3.b <-
 
 Fig.3.b
 
-test %>% 
-  select(-c(`.y.`, term)) %>%
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Diet*Exposure",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
   flextable() %>%
-  align(j = 1:3, align = "left") %>%
-  colformat_double(j = 4:7, digits = 3) %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(6,12), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Diet*Exposure), family = quasibinomial)"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet*Exposure), family = quasibinomial) )")) %>%
+    autofit()
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
-  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet:Treatment), family = quasibinomial)")) %>%
+  hline(i = c(3,6, 9, 12, 15, 18, 21, 24), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet*Exposure), family = quasibinomial)")) %>%
   autofit()
 
 ```
@@ -943,11 +1625,12 @@ Fig.3.c <-
 
 Fig.3.c
 
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Exposure"))
+
 ```
 
 #### Diets
-
-##### Bray-Curtis
 
 ```{r}
 
@@ -1006,18 +1689,177 @@ Fig.3.d <-
 
 Fig.3.d
 
-stats_table(anova)
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diets"))
+
+```
+
+#### (SM) Diets:Exposure 
+
+```{r}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet", "PrePostExp"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+cap.max <- max(dt.ord.full.beta$`Bray-Curtis`$sample.coords$CAP2)
+
+
+
+Supp.Fig.3.d <-
+  dt.ord.full.beta$`Bray-Curtis`$sample.coords %>%
+    ggplot(aes(x = CAP1, y = CAP2)) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet,
+                     shape = PrePostExp),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(values = pal.Dark2) +
+      scale_color_manual(values = pal.Dark2)  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(x = dt.ord.full.beta$`Bray-Curtis`$axes.labs[1], 
+           y = dt.ord.full.beta$`Bray-Curtis`$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+
+Fig.3.d
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diets"))
 
 ```
 
 
+#### (SM) Beta-Dispersion
+
+```{r}
+beta.disp.data <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+beta.disp.data
+```
 
 
+##### Exposure
 
+```{r}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist2[1:2], function(beta) {
+  betadisper(beta, group = data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist2[1:2], function(beta) {
+  betadisper(beta, group = data$PrePostExp)  %>% boxplot(col = pal.Set1[c(1,4,2)])
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+```
+
+##### Diet:Exposure
+
+```{r fig.width=20}
+
+# Add interaction
+data <- data %>%
+  mutate(Diet.Exp = paste0(Diet,".", PrePostExp), .after = Age)
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist2[1:2], function(beta) {
+  betadisper(beta, group = data$Diet.Exp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist2[1:2], function(beta) {
+  betadisper(beta, group = data$Diet.Exp)  %>% boxplot(col = pal.Set1[c(1,4,2)])
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    arrange(`p-value`) %>%
+    filter(`p-value` < 0.15) %>%
+    mutate(sig = ifelse(`p-value` <= 0.05, "*", "")) %>%
+    flextable() 
+})
+
+```
 
 ### Differential Abundance
-
-
 
 #### Exposure:Diets
 
@@ -1055,8 +1897,8 @@ Fig.3.e <-
     geom_boxplot(aes(fill = PrePostExp)) +
     geom_quasirandom(size = .75) +
     facet_grid(. ~ Diet, scale = "free") +
-    scale_fill_manual(values = pal.Set1[c(1,4,2)]) +
-    scale_color_manual(values = pal.Set1[c(1,4,2)]) + 
+    scale_fill_manual(values = pal.Set1[c(4,2,1)]) +
+    scale_color_manual(values = pal.Set1[c(4,2,1)]) + 
     scale_x_discrete(labels=c('Pre', 'Exp', 'Une')) +
     labs(
       # title = "",
@@ -1106,6 +1948,67 @@ res_global.EXP %>%
   colformat_double(j = 3:4, digits = 4) %>%
   set_formatter(values = list("p_val" = p_val_format,
                               "q_val" = p_val_format) )
+
+```
+
+
+#### (SM) Exposure:Diets
+
+```{r}
+
+
+# Gemma
+
+data.DiffAb.Exp <- 
+  lapply(c("Gemma", "Watts", "ZIRC"), function(diet){
+    a <- lfc.exp.diets[[diet]][["tab_lfc"]] %>%
+      tibble::rownames_to_column("Taxon") %>%
+      filter(Taxon == "Mycobacterium") %>% rename(LFC = 2)
+    
+    b <- lfc.exp.diets[[diet]][["tab_se"]] %>%
+      tibble::rownames_to_column("Taxon") %>%
+      filter(Taxon == "Mycobacterium") %>% rename(SE = 2)
+    
+    c <- lfc.exp.diets[[diet]][["tab_p"]] %>%
+      tibble::rownames_to_column("Taxon") %>%
+      filter(Taxon == "Mycobacterium") %>% rename(P.value = 2)
+    
+    left_join(a,b, by = "Taxon") %>%
+      left_join(c, by = "Taxon") %>%
+      mutate(Diet = diet, .before = 1)
+  }) %>% bind_rows() %>%
+    dplyr::mutate(direct = ifelse(LFC > 0, "Positive LFC", "Negative LFC"))
+
+data.DiffAb.Exp %>%
+  mutate(sig = ifelse(P.value <= 0.05, "*", ""))%>% 
+  flextable() %>%
+  # align(j = 3:6, align = "right") %>%
+  # colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC: Log Fold Change Abundance")) %>%
+  autofit()
+
+plot =
+ggplot(data = data.DiffAb.Exp, 
+           aes(x = Taxon, y = LFC, fill = Diet, color = Diet), group = Diet) + 
+  geom_bar(stat = "identity", 
+           position = position_dodge2(width = 1, preserve = "single"), width = .4) +
+  geom_errorbar(aes(ymin = LFC - SE, ymax = LFC + SE), width = 0.4,
+                position = position_dodge2(width = 1, preserve = "single"), color = "black") +
+  labs(x = NULL, y = "Log fold change",
+       title = paste0("Log-fold Change of Mycobacterium in Exposed Fish"),
+       caption = "Relative to Unexposed fish at 6 months old") +
+  scale_fill_manual(values = pal.Dark2) +
+  scale_color_manual(values = pal.Dark2) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0),
+        panel.grid.minor.y = element_blank(),
+        # axis.text.x = element_text(angle = 60, hjust = 1)
+        )
+
+plot
 
 ```
 

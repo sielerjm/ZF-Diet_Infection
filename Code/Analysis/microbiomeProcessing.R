@@ -92,6 +92,28 @@ dt.conT0T1 <- dt.all %>%
 ps.conT0T1 <- ps.all %>%
   subset_samples(Treatment == "Control")
 
+df.conT0T1 %>% 
+  group_by(PrePostExp) %>%
+  count()
+
+## Initial and Final (extra) ----------------------------------------------------
+
+# Dataframe
+df.conT0T1_2 <- df.all %>%
+  filter(PrePostExp != "Exposed" )
+
+# Datatable
+dt.conT0T1_2 <- dt.all %>%
+  filter(PrePostExp != "Exposed" )
+
+# Phyloseq Object
+ps.conT0T1_2 <- ps.all %>%
+  subset_samples(PrePostExp != "Exposed" )
+
+df.conT0T1_2 %>% 
+  group_by(PrePostExp) %>%
+  count()
+
 ## Final ----------------------------------------------------------------
 # Dataframe
 df.T1 <- df.all %>%
@@ -163,6 +185,12 @@ dt.alphaScores.conT0T1 <- alpha_base(ps.conT0T1,  # Phyloseq object
                                      F  # Set T if you have phylogenetic data
 ) 
 
+dt.alphaScores.conT0T1_2 <- alpha_base(ps.conT0T1_2,  # Phyloseq object
+                                     methods.alpha,  # list of alpha methods
+                                     "Sample",  # Column name for sample IDs
+                                     F  # Set T if you have phylogenetic data
+) 
+
 dt.alphaScores.T1 <- alpha_base(ps.T1,  # Phyloseq object
                                 methods.alpha,  # list of alpha methods
                                 "Sample",  # Column name for sample IDs
@@ -188,6 +216,7 @@ dt.alphaScores.expFin <- alpha_base(ps.expFin,  # Phyloseq object
 dt.alphaScores.norm.all <- norm_alpha_score(dt.alphaScores.all, df.all, methods.alpha)
 dt.alphaScores.norm.T0 <- norm_alpha_score(dt.alphaScores.T0, df.T0, methods.alpha)
 dt.alphaScores.norm.conT0T1 <- norm_alpha_score(dt.alphaScores.conT0T1, df.conT0T1, methods.alpha)
+dt.alphaScores.norm.conT0T1_2 <- norm_alpha_score(dt.alphaScores.conT0T1_2, df.conT0T1_2, methods.alpha)
 dt.alphaScores.norm.T1 <- norm_alpha_score(dt.alphaScores.T1, df.T1, methods.alpha)
 dt.alphaScores.norm.conT1 <- norm_alpha_score(dt.alphaScores.conT1, df.conT1, methods.alpha)
 dt.alphaScores.norm.expFin <- norm_alpha_score(dt.alphaScores.expFin, df.expFin, methods.alpha)
@@ -199,6 +228,7 @@ dt.alphaScores.norm.expFin <- norm_alpha_score(dt.alphaScores.expFin, df.expFin,
 dt.alphaPlus.all <- alpha_dataTable(dt.all, dt.alphaScores.norm.all)
 dt.alphaPlus.T0 <- alpha_dataTable(dt.T0, dt.alphaScores.norm.T0)
 dt.alphaPlus.conT0T1 <- alpha_dataTable(dt.conT0T1, dt.alphaScores.norm.conT0T1)
+dt.alphaPlus.conT0T1_2 <- alpha_dataTable(dt.conT0T1_2, dt.alphaScores.norm.conT0T1_2)
 dt.alphaPlus.T1 <- alpha_dataTable(dt.T1, dt.alphaScores.norm.T1)
 dt.alphaPlus.conT1 <- alpha_dataTable(dt.conT1, dt.alphaScores.norm.conT1)
 dt.alphaPlus.expFin <- alpha_dataTable(dt.expFin, dt.alphaScores.norm.expFin)
@@ -208,6 +238,7 @@ dt.alphaPlus.expFin <- alpha_dataTable(dt.expFin, dt.alphaScores.norm.expFin)
 dt.alphaPlus.all.melt <- melt_alphaDataTable(dt.alphaPlus.all)
 dt.alphaPlus.T0.melt <- melt_alphaDataTable(dt.alphaPlus.T0)
 dt.alphaPlus.conT0T1.melt <- melt_alphaDataTable(dt.alphaPlus.conT0T1)
+dt.alphaPlus.conT0T1_2.melt <- melt_alphaDataTable(dt.alphaPlus.conT0T1_2)
 dt.alphaPlus.T1.melt <- melt_alphaDataTable(dt.alphaPlus.T1)
 dt.alphaPlus.conT1.melt <- melt_alphaDataTable(dt.alphaPlus.conT1)
 dt.alphaPlus.expFin.melt <- melt_alphaDataTable(dt.alphaPlus.expFin)
@@ -222,6 +253,7 @@ methods.beta <- names(distList.all) %>% set_names(., .)
 
 distList.T0 <- gen.dist.matrices(ps.T0, methods = "taxonomic", cores = num.cores)
 distList.conT0T1 <- gen.dist.matrices(ps.conT0T1, methods = "taxonomic", cores = num.cores)
+distList.conT0T1_2 <- gen.dist.matrices(ps.conT0T1_2, methods = "taxonomic", cores = num.cores)
 distList.T1 <- gen.dist.matrices(ps.T1, methods = "taxonomic", cores = num.cores)
 distList.conT1 <- gen.dist.matrices(ps.conT1, methods = "taxonomic", cores = num.cores)
 distList.expFin <- gen.dist.matrices(ps.expFin, methods = "taxonomic", cores = num.cores)
@@ -231,6 +263,9 @@ distList.conT0T1.Gemma <- gen.dist.matrices(subset_samples(ps.conT0T1, Diet == "
 distList.conT0T1.Watts <- gen.dist.matrices(subset_samples(ps.conT0T1, Diet == "Watts"), methods = "taxonomic", cores = num.cores)
 distList.conT0T1.ZIRC <- gen.dist.matrices(subset_samples(ps.conT0T1, Diet == "ZIRC"), methods = "taxonomic", cores = num.cores)
 distList.conT1.ZIRC <- gen.dist.matrices(subset_samples(ps.conT1, Diet == "ZIRC"), methods = "taxonomic", cores = num.cores)
+
+
+
 
 # Differential Abundance ------------------------------------------------
 
@@ -887,6 +922,10 @@ df_se.exp <-
 
 
 
+# Save R_object -----------------------------------------------------------
+
+
+save_env(path.rObjects, ID = analysis.ID, extra_info = "microbiomeProcessing")
 
 
 # End of doc ---------------------------------------------------------------------

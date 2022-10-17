@@ -34,35 +34,33 @@ library(microbiome)
 
 ### Load Data
 
-#### Single Group
-
 ```{r data1}
 # data(atlas1006) 
 # Subset to baseline
-pseq = ps.conT0T1 %>% subset_samples(Diet == "Gemma")
-data = dt.conT0T1 %>% subset(Diet == "Gemma")
+pseq = ps.T1 #%>% subset_samples(Diet == "Gemma")
+data = dt.T1 #%>% subset(Diet == "Gemma")
 
 # Relevel
 
 
-# levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Unexposed", "Exposed"))
-# data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Unexposed")
-# 
-# 
-# levels(sample_data(pseq)$PrePostExp) <- factor(levels(sample_data(pseq)$PrePostExp),levels = c("Unexposed", "Exposed"))
-# sample_data(pseq)$PrePostExp <- relevel(factor(sample_data(pseq)$PrePostExp), ref = "Unexposed")
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Unexposed", "Exposed"))
+data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Unexposed")
+
+
+levels(sample_data(pseq)$PrePostExp) <- factor(levels(sample_data(pseq)$PrePostExp),levels = c("Unexposed", "Exposed"))
+sample_data(pseq)$PrePostExp <- relevel(factor(sample_data(pseq)$PrePostExp), ref = "Unexposed")
 
 # ADD INTERACTION
 sample_data(pseq) <- microbiome::meta(pseq) %>%
-  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age) 
+  mutate(Diet.Exp = paste0(Diet,".",PrePostExp), .after = Age) 
 
 data <- data %>%
-  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+  mutate(Diet.Exp = paste0(Diet,".",PrePostExp), .after = Age)
 
 # Sanity check counts are correct
 
 microbiome::meta(pseq) %>%
-  group_by(Diet.Time) %>%
+  group_by(Diet.Exp) %>%
   count()
 
 
@@ -78,49 +76,8 @@ phylum_data = aggregate_taxa(pseq, "Phylum")
 # print(phylum_data)
 ```
 
-#### Multiple Groups
-
-```{r data1}
-# data(atlas1006) 
-# Subset to baseline
-pseq.Gemma = ps.conT0T1 %>% subset_samples(Diet == "Gemma")
-data.Gemma = dt.conT0T1 %>% subset(Diet == "Gemma")
-
-pseq.Watts = ps.conT0T1 %>% subset_samples(Diet == "Watts")
-data.Watts = dt.conT0T1 %>% subset(Diet == "Watts")
-
-pseq.ZIRC = ps.conT0T1 %>% subset_samples(Diet == "ZIRC")
-data.ZIRC = dt.conT0T1 %>% subset(Diet == "ZIRC")
-
-
-
-# Genus level data
-Genus_data.Gemma = aggregate_taxa(pseq.Gemma, "Genus")
-# Family level data
-Family_data.Gemma = aggregate_taxa(pseq.Gemma, "Family")
-# Phylum level data
-Phylum_data.Gemma = aggregate_taxa(pseq.Gemma, "Phylum")
-
-# Genus level data
-Genus_data.Watts = aggregate_taxa(pseq.Watts, "Genus")
-# Family level data
-Family_data.Watts = aggregate_taxa(pseq.Watts, "Family")
-# Phylum level data
-Phylum_data.Watts = aggregate_taxa(pseq.Watts, "Phylum")
-
-# Genus level data
-Genus_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Genus")
-# Family level data
-Family_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Family")
-# Phylum level data
-Phylum_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Phylum")
-
-
-```
 
 ### Run AncomBC
-
-#### Single Group
 
 ```{r}
 
@@ -130,20 +87,19 @@ tax.level = genus_data #phylum_data
 tax.label = "Genus"
 tax.data = taxa.data.table(tax.level)
 
-
 out = ancombc(phyloseq = tax.level, 
-              formula = "Timepoint", 
+              formula = "Diet.Exp", 
               p_adj_method = "BH", 
               # lib_cut = 0, 
               # prv_cut = 0,
-              # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+              group = "Diet.Exp", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
               # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
               neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
               tol = 1e-05, 
               max_iter = 100,
               conserve = T, 
               alpha = 0.05, 
-              # global = T
+              global = T
               #assay_name = "counts"
               )
 
@@ -152,8 +108,6 @@ res_global = out$res_global
 
 
 ```
-
-#### Multiple Groups
 
 
 ## Global
@@ -222,7 +176,8 @@ mid = (lo + up)/2
 p_heat_diet = df_plot %>%
   ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
   geom_tile(color = "white") +
-  facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ PrePostExp")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ PrePostExp")), scales = "free", space = "free", switch = "both") +
+  facet_grid(. ~ PrePostExp, scales = "free", switch="both") +
   scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
                        na.value = "white", midpoint = mid, limit = c(lo, up),
                        name = NULL) +
@@ -230,7 +185,9 @@ p_heat_diet = df_plot %>%
   labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.label ,")")) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5),
-        strip.text.y.left = element_text(angle = 0)
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12),
+        strip.text.x = element_text(size = 12)
         )
 
 p_heat_diet
@@ -242,7 +199,8 @@ p_heat_diet
 p_heat_exp = df_plot %>%
   ggplot(aes(x = PrePostExp, y = Taxon, fill = value)) + 
   geom_tile(color = "white") +
-  facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  facet_grid(. ~ Diet, scales = "free", switch="both") +
   scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
                        na.value = "white", midpoint = mid, limit = c(lo, up),
                        name = NULL) +
@@ -250,7 +208,9 @@ p_heat_exp = df_plot %>%
   labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.label ,")")) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5),
-        strip.text.y.left = element_text(angle = 0)
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12),
+        strip.text.x = element_text(size = 12)
         )
 p_heat_exp
 
@@ -353,7 +313,7 @@ df_heat %>%
 
 ## Comparative
 
-### Single Group
+### Calculate change
 
 ```{r}
 # Log-fold Change
@@ -362,16 +322,13 @@ tab_lfc = res$lfc
 tab_se = res$se
 tab_p = res$p_val
 tab_diff = res$diff_abn
-tab_diff
 ```
-
-
 
 
 
 ### Visualization
 
-#### Single Group
+#### Prep
 
 ```{r}
 df_lfc = data.frame(res$lfc * res$diff_abn, check.names = FALSE) %>% 
@@ -379,291 +336,36 @@ df_lfc = data.frame(res$lfc * res$diff_abn, check.names = FALSE) %>%
 df_se = data.frame(res$se * res$diff_abn, check.names = FALSE) %>% 
   rownames_to_column("Taxon_id")
 colnames(df_se)[-1] = paste0(colnames(df_se)[-1], "SE")
+```
 
+#### Plot
 
-# Plot
-
-df_fig_timepoint = df_lfc %>% 
+```{r}
+df_fig_exposure = df_lfc %>% 
   dplyr::left_join(df_se, by = "Taxon_id") %>%
   # dplyr::transmute(taxon_id, bmi = bmi_groupobese, bmiSE = bmi_groupobeseSE) %>%
-  filter(if_any(contains("Timepoint"), ~ . != 0)) %>%
-  dplyr::arrange(desc(Timepoint6mpf)) %>%
-  dplyr::mutate(direct = ifelse(Timepoint6mpf > 0, "Positive LFC", "Negative LFC"))
-df_fig_timepoint$Taxon_id = factor(df_fig_timepoint$Taxon_id, levels = df_fig_timepoint$Taxon_id)
-df_fig_timepoint$direct = factor(df_fig_timepoint$direct, 
+  filter(if_any(contains("PrePostExpExposed"), ~ . != 0)) %>%
+  dplyr::arrange(desc(PrePostExpExposed)) %>%
+  dplyr::mutate(direct = ifelse(PrePostExpExposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_exposure$Taxon_id = factor(df_fig_exposure$Taxon_id, levels = df_fig_exposure$Taxon_id)
+df_fig_exposure$direct = factor(df_fig_exposure$direct, 
                         levels = c("Positive LFC", "Negative LFC"))
   
-p_time = ggplot(data = df_fig_timepoint, 
-           aes(x = Taxon_id, y = Timepoint6mpf, fill = direct, color = direct)) + 
+p_exposure = ggplot(data = df_fig_exposure, 
+           aes(x = Taxon_id, y = PrePostExpExposed, fill = direct, color = direct)) + 
   geom_bar(stat = "identity", width = 0.7, 
            position = position_dodge(width = 0.4)) +
-  geom_errorbar(aes(ymin = Timepoint6mpf - Timepoint6mpfSE, ymax = Timepoint6mpf + Timepoint6mpfSE), width = 0.2,
+  geom_errorbar(aes(ymin = PrePostExpExposed - PrePostExpExposedSE, ymax = PrePostExpExposed + PrePostExpExposedSE), width = 0.2,
                 position = position_dodge(0.05), color = "black") + 
   labs(x = NULL, y = "Log fold change", 
-       title = paste0("Waterfall Plot of ", colnames(df_lfc[2]), " (", tax.label, ")")) + 
-  scale_fill_discrete(name = colnames(df_lfc[2])) +
-  scale_color_discrete(name = colnames(df_lfc[2])) +
+       title = "Waterfall Plot") + 
+  scale_fill_discrete(name = NULL) +
+  scale_color_discrete(name = NULL) +
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5),
         panel.grid.minor.y = element_blank(),
-        axis.text.x = element_text(angle = 60, hjust = 1)
-        )
+        axis.text.x = element_text(angle = 60, hjust = 1))
 
-p_time
-
+p_exposure
 ```
 
-### Multiple Groups 
-
-
-#### Load Data
-
-```{r data1}
-# data(atlas1006) 
-# Subset to baseline
-pseq.Gemma = ps.conT0T1 %>% subset_samples(Diet == "Gemma")
-data.Gemma = dt.conT0T1 %>% subset(Diet == "Gemma")
-
-pseq.Watts = ps.conT0T1 %>% subset_samples(Diet == "Watts")
-data.Watts = dt.conT0T1 %>% subset(Diet == "Watts")
-
-pseq.ZIRC = ps.conT0T1 %>% subset_samples(Diet == "ZIRC")
-data.ZIRC = dt.conT0T1 %>% subset(Diet == "ZIRC")
-
-
-
-# Genus level data
-Genus_data.Gemma = aggregate_taxa(pseq.Gemma, "Genus")
-# Family level data
-Family_data.Gemma = aggregate_taxa(pseq.Gemma, "Family")
-# Phylum level data
-Phylum_data.Gemma = aggregate_taxa(pseq.Gemma, "Phylum")
-
-# Genus level data
-Genus_data.Watts = aggregate_taxa(pseq.Watts, "Genus")
-# Family level data
-Family_data.Watts = aggregate_taxa(pseq.Watts, "Family")
-# Phylum level data
-Phylum_data.Watts = aggregate_taxa(pseq.Watts, "Phylum")
-
-# Genus level data
-Genus_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Genus")
-# Family level data
-Family_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Family")
-# Phylum level data
-Phylum_data.ZIRC = aggregate_taxa(pseq.ZIRC, "Phylum")
-
-```
-
-#### Run Ancom
-
-```{r}
-tax.label = "Genus"
-
-tax.level.Gemma = Genus_data.Gemma 
-tax.data.Gemma = taxa.data.table(tax.level.Gemma)
-
-tax.level.Watts = Genus_data.Watts 
-tax.data.Watts = taxa.data.table(tax.level.Watts)
-
-tax.level.ZIRC = Genus_data.ZIRC 
-tax.data.ZIRC = taxa.data.table(tax.level.ZIRC)
-
-# Genus_ Phylum_ Family_
-
-# Gemma
-
-out.Gemma = ancombc(phyloseq = tax.level.Gemma, 
-              formula = "Timepoint", 
-              p_adj_method = "BH", 
-              # lib_cut = 0, 
-              # prv_cut = 0,
-              # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
-              # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
-              neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
-              tol = 1e-05, 
-              max_iter = 100,
-              conserve = T, 
-              alpha = 0.05, 
-              # global = T
-              #assay_name = "counts"
-              )
-
-res.Gemma = out.Gemma$res
-res_global.Gemma = out.Gemma$res_global
-
-
-# Watts
-
-out.Watts = ancombc(phyloseq = tax.level.Watts, 
-              formula = "Timepoint", 
-              p_adj_method = "BH", 
-              # lib_cut = 0, 
-              # prv_cut = 0,
-              # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
-              # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
-              neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
-              tol = 1e-05, 
-              max_iter = 100,
-              conserve = T, 
-              alpha = 0.05, 
-              # global = T
-              #assay_name = "counts"
-              )
-
-res.Watts = out.Watts$res
-res_global.Watts = out.Watts$res_global
-
-
-# ZIRC
-
-out.ZIRC = ancombc(phyloseq = tax.level.ZIRC, 
-              formula = "Timepoint", 
-              p_adj_method = "BH", 
-              # lib_cut = 0, 
-              # prv_cut = 0,
-              # group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
-              # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
-              neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
-              tol = 1e-05, 
-              max_iter = 100,
-              conserve = T, 
-              alpha = 0.05, 
-              # global = T
-              #assay_name = "counts"
-              )
-
-res.ZIRC = out.ZIRC$res
-res_global.ZIRC = out.ZIRC$res_global
-
-
-
-# Gemma
-
-lfc.Gemma <- list()
-
-lfc.Gemma$tab_lfc = res.Gemma$lfc
-lfc.Gemma$tab_se = res.Gemma$se
-lfc.Gemma$tab_p = res.Gemma$p_val
-lfc.Gemma$tab_diff = res.Gemma$diff_abn
-
-lfc.Gemma$df_lfc = data.frame(lfc.Gemma$tab_lfc * lfc.Gemma$tab_diff, check.names = FALSE) %>% 
-  rownames_to_column("Taxon_id")
-lfc.Gemma$df_se = data.frame(lfc.Gemma$tab_se * lfc.Gemma$tab_diff, check.names = FALSE) %>% 
-  rownames_to_column("Taxon_id")
-colnames(lfc.Gemma$df_se)[-1] = paste0(colnames(lfc.Gemma$df_se)[-1], "SE")
-
-lfc.Gemma$df_lfc <- 
-  lfc.Gemma$df_lfc %>%
-  rename(Gemma.6mpf = Timepoint6mpf)
-
-lfc.Gemma$df_se <- 
-  lfc.Gemma$df_se %>%
-  rename(Gemma.6mpf = Timepoint6mpfSE)
-
-# Watts
-
-lfc.Watts <- list()
-
-lfc.Watts$tab_lfc = res.Watts$lfc
-lfc.Watts$tab_se = res.Watts$se
-lfc.Watts$tab_p = res.Watts$p_val
-lfc.Watts$tab_diff = res.Watts$diff_abn
-
-lfc.Watts$df_lfc = data.frame(lfc.Watts$tab_lfc * lfc.Watts$tab_diff, check.names = FALSE) %>% 
-  rownames_to_column("Taxon_id")
-lfc.Watts$df_se = data.frame(lfc.Watts$tab_se * lfc.Watts$tab_diff, check.names = FALSE) %>% 
-  rownames_to_column("Taxon_id")
-colnames(lfc.Watts$df_se)[-1] = paste0(colnames(lfc.Watts$df_se)[-1], "SE")
-
-lfc.Watts$df_lfc <- 
-  lfc.Watts$df_lfc %>%
-  rename(Watts.6mpf = Timepoint6mpf)
-
-lfc.Watts$df_se <- 
-  lfc.Watts$df_se %>%
-  rename(Watts.6mpf = Timepoint6mpfSE)
-
-# ZIRC
-
-lfc.ZIRC <- list()
-
-lfc.ZIRC$tab_lfc = res.ZIRC$lfc
-lfc.ZIRC$tab_se = res.ZIRC$se
-lfc.ZIRC$tab_p = res.ZIRC$p_val
-lfc.ZIRC$tab_diff = res.ZIRC$diff_abn
-
-lfc.ZIRC$df_lfc = data.frame(lfc.ZIRC$tab_lfc * lfc.ZIRC$tab_diff, check.names = FALSE) %>% 
-  rownames_to_column("Taxon_id")
-lfc.ZIRC$df_se = data.frame(lfc.ZIRC$tab_se * lfc.ZIRC$tab_diff, check.names = FALSE) %>% 
-  rownames_to_column("Taxon_id")
-colnames(lfc.ZIRC$df_se)[-1] = paste0(colnames(lfc.ZIRC$df_se)[-1], "SE")
-
-lfc.ZIRC$df_lfc <- 
-  lfc.ZIRC$df_lfc %>%
-  rename(ZIRC.6mpf = Timepoint6mpf)
-
-lfc.ZIRC$df_se <- 
-  lfc.ZIRC$df_se %>%
-  rename(ZIRC.6mpf = Timepoint6mpfSE)
-
-
-# Join and Pivot
-
-## DF
-
-df_lfc.diets <- 
-lfc.Gemma$df_lfc %>%
-  left_join(lfc.Watts$df_lfc, by = "Taxon_id",  na_matches = "never") %>% 
-  left_join(lfc.ZIRC$df_lfc, by = "Taxon_id",  na_matches = "never") %>% 
-  replace(is.na(.), 0) %>%
-  pivot_longer(cols = 2:4, names_to = "Diet")
-
-## SE
-
-df_se.diets <- 
-lfc.Gemma$df_se %>%
-  left_join(lfc.Watts$df_se, by = "Taxon_id",  na_matches = "never") %>% 
-  left_join(lfc.ZIRC$df_se, by = "Taxon_id",  na_matches = "never") %>% 
-  replace(is.na(.), 0) %>%
-  pivot_longer(cols = 2:4, names_to = "Diet")
-
-
-# df_lfc.diets
-# df_se.diets
-
-
-
-# Plot
-
-df_fig_diets = df_lfc.diets %>% 
-  dplyr::left_join(df_se.diets, by = c("Taxon_id", "Diet"), suffix = c("", ".SE")) %>%
-  filter(if_any(contains("value"), ~ . != 0)) %>%
-  dplyr::arrange(desc(value)) %>%
-  dplyr::mutate(direct = ifelse(value > 0, "Positive LFC", "Negative LFC"))
-# df_fig_diets$Taxon_id = df_fig_diets %>%
-#   group_by(Taxon_id, Diet) %>% 
-#   factor(levels = df_fig_diets$Taxon_id)
-df_fig_diets$direct = factor(df_fig_diets$direct, 
-                        levels = c("Positive LFC", "Negative LFC"))
-  
-p_diets =
-ggplot(data = df_fig_diets, 
-           aes(x = reorder(Taxon_id, -value, FUN = mean), y = value, fill = Diet, color = Diet), group = Diet) + 
-  geom_bar(stat = "identity", 
-           position = position_dodge2(width = 1, preserve = "single"), width = .4) +
-  geom_errorbar(aes(ymin = value - value.SE, ymax = value + value.SE), width = 0.4,
-                position = position_dodge2(width = 1, preserve = "single"), color = "black") +
-  labs(x = NULL, y = "Log fold change",
-       title = paste0("Waterfall Plot of ", colnames(df_lfc[2]), " (", tax.label, ")")) +
-  scale_fill_manual(values = pal.Dark2) +
-  scale_color_manual(values = pal.Dark2) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5),
-        panel.grid.minor.y = element_blank(),
-        axis.text.x = element_text(angle = 60, hjust = 1)
-        )
-
-p_diets
-
-```

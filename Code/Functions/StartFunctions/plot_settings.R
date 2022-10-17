@@ -33,6 +33,14 @@ pal.Spectral <- brewer.pal(9, "Spectral")
 pal.BrBg <- brewer.pal(11, "BrBG")
 
 
+
+## Custom (variable specific) ----------------------------------------------
+
+col.Diet <- pal.Dark2[1:3]  # Gemma, Watts, ZIRC
+col.Time <- pal.Dark2[c(6,4)]  # 3mo, 6mo
+col.Exp <- pal.Set1[c(4,1,2)]  # Pre-exposed, unexposed, exposed
+
+
 # GGplot2 Theme -----------------------------------------------------------
 #     Standardizing ggplot settings
 #     (adapted from Keaton Stagaman)

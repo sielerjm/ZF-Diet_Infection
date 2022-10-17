@@ -29,6 +29,7 @@ library(ggrepel)  # Adds label buffering to labels so they don't overlap, geom_l
 # # library(gridExtra)  # Miscellaneous Functions for "Grid" Graphics
 library(RColorBrewer)  # Making and using pretty color palettes
 library(rstatix)
+library(webshot)  # Export figures
 
 
 # Microbiome --------------------------------------------------------------
@@ -38,6 +39,7 @@ library(phyloseqCompanion)  # Helper functions for phyloseq
 library(vegan)  # Ecological analysis
 library(ANCOMBC)  # Differntial abundance, composition
 library(microbiome)
+library(microbData)  # alternative to phyloseq
 
 
 # Statistics --------------------------------------------------------------
@@ -63,3 +65,5 @@ library(multcomp)  # Multiple comparison tests
 # KEEP AS LAST LIBRARY TO LOAD --------------------------------------------
 # Load last because of potential conflicting function names in previous libs
 library(tidyverse)  # Making your code look pretty and tidy
+
+

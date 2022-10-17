@@ -15,7 +15,7 @@ save_env <- function(
   if(is.na(extra_info)){
     save.image(paste0(obj.path, "/environment", ID, "_ENV.RData"))
   } else{
-    save.image(paste0(obj.path, "/environment_", extra_info, ID, "_ENV.RData"))
+    save.image(paste0(obj.path, "/environment_", extra_info, "_", ID, "_ENV.RData"))
   }
 }
 

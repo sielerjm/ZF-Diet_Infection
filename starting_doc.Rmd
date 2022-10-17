@@ -47,11 +47,16 @@ start.files <- paste0(file.path(proj.path, list.files(paste0(proj.path,"/Code/Fu
 # Important Paths
 path.code <- paste0(proj.path,"/Code")
 path.data <- paste0(proj.path,"/Data")
+path.rObjects <- paste0(path.data, "/R_objects")
 path.input <- paste0(proj.path,"/Data/Input") 
 path.results <- paste0(proj.path,"/Results") 
+path.figures <- paste0(proj.path, "/Manuscript/Figures")
 
 # Save Environment
 # save_env(objects.path, ID = analysis.ID, extra_info = "_pipeline_output")
+
+gg_record(dir = file.path(path.figures, "gg_Record"),
+            device = "png")
 
 ```
 

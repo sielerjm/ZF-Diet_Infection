@@ -22,7 +22,7 @@ knitr::opts_chunk$set(
   cache = FALSE,
   warning = FALSE,
   message = FALSE, 
-  fig.width = 5, fig.height = 5,
+  # fig.width = 5, fig.height = 5,
   dpi = 300
 )
 
@@ -33,11 +33,25 @@ proj.path <- paste0(getwd(), "/../../")
 source(paste0(proj.path,"/Code/Functions/StartFunctions/plot_settings.R"))
 
 
+
+
 ```
+
+
+```{r}
+
+df.all %>%
+  group_by(PrePostExp) %>%
+  count()
+
+```
+
+
+
 
 <!-- # Main Figures -->
 
-## Diet
+## Diet (3mo)
 
 ```{r}
 
@@ -48,6 +62,16 @@ dist <- distList.T0
 
 levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
 data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+
+# Plot output settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/Physiology"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
 
 ```
 
@@ -373,6 +397,19 @@ test %>%
 
 ### Alpha Diversity
 
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/Alpha"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+
 #### Diets
 
 ```{r Diet-Alpha-Diets}
@@ -402,9 +439,9 @@ plot.sig.labs <- lapply(methods.alpha, function(alpha){
   select(`.y.`, group1, group2, p.adj.signif)
 })
 
-Fig.1.c <- 
+Fig.1.c <- lapply(methods.alpha, function(alpha){ 
   data.alpha %>%
-  filter(Alpha.Metric == "Simpson") %>%
+  filter(Alpha.Metric == alpha) %>%
     ggplot(aes(x = Diet, 
                y = Alpha.Score
                )) +
@@ -414,11 +451,11 @@ Fig.1.c <-
     scale_color_manual(values = pal.Set1) + 
     labs(
       # title = "",
-      # caption = "",
+      caption = paste0(alpha," (3mo)"),
       x = "Diet",
       y = "Alpha Score (normalized)"
     ) +
-    ggpubr::stat_pvalue_manual(plot.sig.labs[["Simpson"]], 
+    ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha]], 
                                label = "p.adj.signif", 
                                size = 6,
                                bracket.size = 1,
@@ -426,7 +463,7 @@ Fig.1.c <-
     scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
                        limits = c(0, 1.1)) + 
   theme(legend.position = "none")
-
+})
 
 Fig.1.c
 
@@ -485,6 +522,19 @@ tukey.test.list %>%
 
 ### Beta Diversity
 
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/Beta"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
 #### Diets
 
 ```{r Diet-Beta-Diets}
@@ -510,43 +560,316 @@ anova <- beta_anova(beta.model = mod,
 dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
 beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
 beta.axis.full <- axis_labels(dt.ord.full.beta)
-p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
-p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
-cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[2]])
-cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords$CAP2)
 
 
+Fig.1.d <- lapply(methods.beta, function(beta){
 
-Fig.1.d <-
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
   dt.ord.full.beta[[beta]]$sample.coords %>%
-    ggplot(aes(x = CAP1, y = CAP2)) +
-      stat_ellipse(aes(color = Diet)) +
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
       geom_point(aes(color = Diet),
                  size = 2.5,
-                 alpha = 1
-                 ) +
-      # geom_segment(
-      #     data = dt.ord.full.beta[[beta]]$vector.coords, 
-      #     aes(x = 0, 
-      #         y = 0, 
-      #         xend = CAP1, 
-      #         yend = CAP2),
-      #     color = "black",
-      #     arrow = arrow(length = unit(0.05, "npc"))
-      # ) +
+                 alpha = 1) +
       annotate("text", 
                label = p.val.label,
-               x = cap.max, 
-               y = cap.min, 
+               x = cap.max, y = cap.min, 
                size = 5, 
                color = "black",
                hjust = .95
       ) +
-      scale_fill_manual(values = pal.Dark2) +
-      scale_color_manual(values = pal.Dark2)  + 
+      scale_fill_manual(name = "Diet", values = col.Diet) +
+      scale_color_manual(name = "Diet", values = col.Diet)  + 
       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
-           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
       theme(legend.position = "bottom")
+})
+
+
+
+Fig.1.d
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet"))
+
+```
+
+#### (SM) Beta-Dispersion
+
+```{r}
+
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+```
+
+
+##### Diet
+
+```{r}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp <- lapply(dist[1:2], function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist[1:2], function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% boxplot(xlab = "Diet")
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+```
+
+## Diet (6mo)
+
+```{r}
+
+data <- df.conT1
+data.alpha <- dt.alphaPlus.conT1.melt
+ps.obj <- ps.conT1
+dist <- distList.conT1
+
+levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
+data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+```
+
+### Alpha Diversity
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_6moCtrl/Alpha"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+#### Diets
+
+```{r Diet-Alpha-Diets}
+
+# library(multcomp)
+# Source: https://stats.stackexchange.com/a/60361
+# Source: https://cran.r-project.org/web/packages/multcomp/vignettes/multcomp-examples.pdf
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Diet, 
+                             data = data.alpha %>% filter(Alpha.Metric == alpha),
+                             family = "quasibinomial"), 
+                             linfct = mcp(Diet = "Tukey")) ) %>% 
+  tidy() %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
+
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
+  select(`.y.`, group1, group2, p.adj.signif)
+})
+
+Fig.1.c <- lapply(methods.alpha, function(alpha){ 
+  data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    ggplot(aes(x = Diet, 
+               y = Alpha.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Set1) + 
+    labs(
+      # title = "",
+      caption = paste0(alpha," (6mo)"),
+      x = "Diet",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha]], 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(.85, .925, 1.1)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 1.1)) + 
+  theme(legend.position = "none")
+})
+
+Fig.1.c
+
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Diet",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Diet), family = quasibinomial)"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet), family = quasibinomial) )")) %>%
+    autofit()
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
+  autofit()
+
+```
+
+
+### Beta Diversity
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_6moCtrl/Beta"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+#### Diets
+
+```{r Diet-Beta-Diets}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+Fig.1.d <- lapply(methods.beta, function(beta){
+
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  # cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  # cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+  cap.min <- -3
+  cap.max <- 1.5
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet),
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Diet", values = col.Diet) +
+      scale_color_manual(name = "Diet", values = col.Diet)  + 
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
 
 
 Fig.1.d
@@ -632,6 +955,18 @@ data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "3mpf")
 ```
 
 ### Alpha Diversity
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3mo6moCtrl/Alpha"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
 
 #### Time
 
@@ -778,24 +1113,24 @@ plot.sig.labs <- lapply(methods.alpha, function(alpha){
 })
 
 
-Fig.2.b <-
+Fig.2.b <- lapply(methods.alpha, function(alpha){ 
   data.alpha %>%
-  filter(Alpha.Metric == "Shannon") %>%
+  filter(Alpha.Metric == alpha) %>%
     ggplot(aes(x = Timepoint, 
                y = Alpha.Score
                )) +
     geom_boxplot(aes(fill = Diet)) +
     geom_quasirandom(size = 1) +
     facet_grid(. ~ Diet, scale = "free") +
-    scale_fill_manual(values = pal.Dark2) +
-    scale_color_manual(values = pal.Set1) +
+    scale_fill_manual(values = col.Diet) +
+    # scale_color_manual(values = pal.Set1) +
     labs(
       # title = "",
-      # caption = "",
+      caption = alpha,
       x = "Time",
       y = "Alpha Score (normalized)"
     ) +
-    ggpubr::stat_pvalue_manual(plot.sig.labs[["Shannon"]], 
+    ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha]], 
                                label = "p.adj.signif", 
                                size = 6,
                                bracket.size = 1,
@@ -805,6 +1140,8 @@ Fig.2.b <-
                        limits = c(0, 1.1)) +
   theme(legend.position = "none")
 
+})
+  
 Fig.2.b
 
 # Stats
@@ -863,6 +1200,18 @@ tukey.test.list %>%
 
 ### Beta Diversity
 
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3mo6moCtrl/Beta"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
 #### Diets
 
 ```{r Dev-Beta-Diets}
@@ -888,26 +1237,21 @@ anova <- beta_anova(beta.model = mod,
 dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
 beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
 beta.axis.full <- axis_labels(dt.ord.full.beta)
-p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
+
+Fig.2.c <- lapply(methods.beta, function(beta){
+
+p.val <- anova$p.value[anova$metric == beta][1]
 p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
-cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords$CAP2)
-cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords$CAP2)
+cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
 
 
-
-Fig.2.c <-
   dt.ord.full.beta[[beta]]$sample.coords %>%
-    ggplot(aes(x = CAP1, y = CAP2)) +
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
       stat_ellipse(aes(color = Diet )) +
       geom_point(aes(color = Diet),
                  size = 2.5,
                  alpha = 1) +
-      # geom_segment(
-      #     data = dt.ord.full.beta[[beta]]$vector.coords, 
-      #     aes(x = 0, y = 0, xend = CAP1, yend = CAP2),
-      #     color = "black",
-      #     arrow = arrow(length = unit(0.05, "npc"))
-      # ) +
       annotate("text", 
                label = p.val.label,
                x = cap.max, y = cap.min, 
@@ -915,14 +1259,79 @@ Fig.2.c <-
                color = "black",
                hjust = .95
       ) +
-      scale_fill_manual(values = pal.Dark2) +
-      scale_color_manual(values = pal.Dark2)  + 
+      scale_fill_manual(values = col.Diet) +
+      scale_color_manual(values = col.Diet)  + 
       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
-           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
       theme(legend.position = "bottom")
-
+})
 
 Fig.2.c
+
+Fig.2.c.2 <- lapply(methods.beta, function(beta){
+
+p.val <- anova$p.value[anova$metric == beta][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Timepoint )) +
+      geom_point(aes(color = Timepoint),
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(values = col.Time) +
+      scale_color_manual(values = col.Time)  + 
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
+Fig.2.c.2
+
+Fig.2.c.3 <- lapply(methods.beta, function(beta){
+
+p.val <- anova$p.value[anova$metric == beta][1]
+p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet, fill = Timepoint),
+                 shape = 21,
+                 size = 2.5,
+                 stroke = 1.25,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Time", values = col.Time) +
+      scale_color_manual(name = "Diet",values = col.Diet)  + 
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
+Fig.2.c.3
 
 stats_table(anova) %>%
   set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet"))
@@ -958,29 +1367,21 @@ anova <- beta_anova(beta.model = mod,
 dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
 beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
 beta.axis.full <- axis_labels(dt.ord.full.beta)
-p.val <- anova$p.value[anova$metric == "Canberra"][1]
-p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
-cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
-cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
 
+Fig.2.d <-lapply(methods.beta, function(beta){
 
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
 
-Fig.2.d <-
   dt.ord.full.beta[[beta]]$sample.coords %>%
-    ggplot(aes(x = CAP1, y = MDS1)) +
-      stat_ellipse(aes(color = Timepoint )) +
-      geom_point(aes(color = Timepoint),
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet, linetype = Timepoint )) +
+      geom_point(aes(color = Diet,
+                     shape = Timepoint),
                  size = 2.5,
                  alpha = 1) +
-      # geom_segment(
-      #     data = dt.ord.full.beta$`Canberra`$vector.coords, 
-      #     aes(x = 0, 
-      #         y = 0, 
-      #         xend = CAP1, 
-      #         yend = MDS1),
-      #     color = "black",
-      #     arrow = arrow(length = unit(0.05, "npc"))
-      # ) +
       annotate("text", 
                label = p.val.label,
                x = cap.max, y = cap.min, 
@@ -988,14 +1389,52 @@ Fig.2.d <-
                color = "black",
                hjust = .95
       ) +
-      scale_fill_manual(name = "Time", values = pal.Dark2[c(6,4)]) +
-      scale_color_manual(name = "Time", values = pal.Dark2[c(6,4)])  + 
+      scale_fill_manual(name = "Time", values = col.Time) +
+      scale_color_manual(name = "Diet", values = col.Diet)  + 
+      scale_shape_manual(name = "Time", values = c(19, 1)) +
+      scale_linetype_manual(name = "Time", values = c("solid", "dashed")) +
       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
-           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
       theme(legend.position = "bottom")
-
+})
 
 Fig.2.d
+
+Fig.2.d.2 <-lapply(methods.beta, function(beta){
+
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet,
+                     shape = Timepoint),
+                 stroke = 1,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Time", values = col.Diet) +
+      scale_color_manual(name = "Time", values = col.Diet)  + 
+      scale_shape_manual(name = "Time", values = c(19, 1)) +
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
+Fig.2.d.2
+
+
 
 stats_table(anova) %>%
   set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Time"))
@@ -1030,17 +1469,22 @@ beta.metric <- 'Bray-Curtis'
 dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
 beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
 beta.axis.full <- axis_labels(dt.ord.full.beta)
-p.val <- anova$p.value[anova$metric == beta.metric][1]
-p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
-cap.min <- min(dt.ord.full.beta[[beta.metric]]$sample.coords[[3]])
-cap.max <- max(dt.ord.full.beta[[beta.metric]]$sample.coords[[2]])
 
 
 
-Fig.2.d <-
+
+
+Fig.2.x.1 <- lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta.metric]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta.metric]]$sample.coords[[2]])
+
+
   dt.ord.full.beta[[beta.metric]]$sample.coords %>%
     ggplot(aes(x = CAP1, y = CAP2)) +
-      stat_ellipse(aes(color = Diet )) +
+      stat_ellipse(aes(color = Diet, linetype = Timepoint )) +
       geom_point(aes(color = Diet,
                      shape = Timepoint),
                  # shape = 21,
@@ -1058,17 +1502,29 @@ Fig.2.d <-
       scale_color_manual(name = "Diet", values = pal.Dark2)  + 
       scale_shape_manual(name = "Time", values = c(19, 1)) +
       labs(x = dt.ord.full.beta[[beta.metric]]$axes.labs[1], 
-           y = dt.ord.full.beta[[beta.metric]]$axes.labs[2]) + 
+           y = dt.ord.full.beta[[beta.metric]]$axes.labs[2],
+           caption = beta) + 
       theme(legend.position = "bottom")
 
-Fig.2.d
+})
+  
+Fig.2.x.1
 
-Fig.2.d.2 <-
+Fig.2.x.2 <- lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta.metric][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta.metric]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta.metric]]$sample.coords[[2]])
+
+
   dt.ord.full.beta[[beta.metric]]$sample.coords %>%
-    ggplot(aes(x = CAP1, y = CAP2)) +
-      stat_ellipse(aes(color = Diet, linetype = Timepoint)) +
-      geom_point(aes(color = Diet,
-                     shape = Timepoint),
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Timepoint, linetype = Diet )) +
+      geom_point(aes(color = Timepoint,
+                     fill = Timepoint,
+                     shape = Diet
+                     ),
                  # shape = 21,
                  size = 2.5,
                  alpha = 1) +
@@ -1080,19 +1536,21 @@ Fig.2.d.2 <-
                color = "black",
                hjust = .95
       ) +
-      scale_fill_manual(name = "Diet", values = pal.Dark2) +
-      scale_color_manual(name = "Diet", values = pal.Dark2)  + 
-      scale_shape_manual(name = "Time", values = c(19, 1)) +
-      scale_linetype_manual(name = "Time", values = c("solid", "dotted")) +
+      scale_fill_manual(name = "Diet", values = col.Time) +
+      scale_color_manual(name = "Diet", values = col.Time)  + 
+      # scale_shape_manual(name = "Time", values = c(19, 1)) +
       labs(x = dt.ord.full.beta[[beta.metric]]$axes.labs[1], 
-           y = dt.ord.full.beta[[beta.metric]]$axes.labs[2]) + 
+           y = dt.ord.full.beta[[beta.metric]]$axes.labs[2],
+           caption = beta) + 
       theme(legend.position = "bottom")
 
+})
+  
+Fig.2.x.2
 
-Fig.2.d.2
 
 stats_table(anova) %>%
-  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Time"))
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet*Time"))
 
 ```
 
@@ -1233,7 +1691,8 @@ beta.disp <- lapply(dist[1:2], function(beta) {
 }) %>% setNames(ord.beta)
 
 lapply(dist[1:2], function(beta) {
-  betadisper(beta, group = data$Diet.Time)  %>% boxplot()
+  betadisper(beta, group = data$Diet.Time)  %>% boxplot(col = col.Diet[c(1,1,2,2,3,3)],
+                                                        xlab = "Diet & Time")
   
 }) 
 
@@ -1257,6 +1716,18 @@ lapply(beta.disp, function(beta) {
 
 
 ### Physiology
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3mo6moCtrl/Physiology"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
 
 #### Body Condition Score
 
@@ -1521,22 +1992,22 @@ data.da <-
     mutate(value = exp(value)) 
 
 # Relevel
-levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
 data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure")
 
-levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
 data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
 
 levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
 data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
 
-levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
 data.beta2$PrePostExp <- relevel(factor(data.beta2$PrePostExp), ref = "Pre-exposure")
 
-levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Exposed", "Unexposed"))
+levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Unexposed", "Exposed"))
 sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
 
-levels(data.da$PrePostExp) <- factor(levels(data.da$PrePostExp), levels = c("Pre-exposure", "Exposed", "Unexposed"))
+levels(data.da$PrePostExp) <- factor(levels(data.da$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
 data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
 
 
@@ -1545,6 +2016,19 @@ data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
 ### Alpha Diversity
 
 #### Exposure
+
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Alpha"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
 
 ```{r Path-Alpha-Exp}
 
@@ -1575,14 +2059,14 @@ plot.sig.labs <- lapply(methods.alpha, function(alpha){
 Fig.3.a <-
   data.alpha %>%
   filter(Alpha.Metric == "Shannon") %>%
-    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Exposed", "Unexposed")),
+    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Unexposed", "Exposed")),
                y = Alpha.Score,
                )) +
     geom_boxplot(aes(fill = PrePostExp)) +
     geom_quasirandom(size = 1) +
     # facet_grid(. ~ Diet, scale = "free") +
-    scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
-    scale_color_manual(values = pal.Set1[c(4,1,2)]) + 
+    scale_fill_manual(values = col.Exp) +
+    scale_color_manual(values = col.Exp) + 
     labs(
       # title = "",
       # caption = "",
@@ -1656,11 +2140,24 @@ tukey.test.list %>%
 
 #### Exposure:Diets
 
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Alpha"),
+          device = "png",
+          width = 10,
+          height = 5,
+          units = "in"
+          )
+
+```
+
 ```{r Path-Alpha-ExpDiets, fig.width = 10, fig.height = 5}
 
 tukey.test.list <- lapply(methods.alpha, function(alpha){
   test <- data.alpha %>%
-    filter(Alpha.Metric == alpha) %>%
+  filter(Alpha.Metric == alpha) %>%
   group_by(Diet) %>%
   nest(data = -Diet) %>%
   mutate(test = map(.x=data, 
@@ -1684,36 +2181,36 @@ tukey.test.list <- lapply(methods.alpha, function(alpha){
 plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
   tukey.test.list[[alpha]] %>% 
   as_tibble() %>% 
-  select(`.y.`, group1, group2, p.adj.signif)
+  select(Diet, `.y.`, group1, group2, p.adj.signif)
 })
 
-
+alpha.metric <- "Shannon"
 
 Fig.3.b <-
   data.alpha %>%
-  filter(Alpha.Metric == "Shannon") %>%
-    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Exposed", "Unexposed")),
+  filter(Alpha.Metric == alpha.metric) %>%
+    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Unexposed", "Exposed")),
                y = Alpha.Score,
                )) +
     geom_boxplot(aes(fill = PrePostExp)) +
     geom_quasirandom(size = 1) +
     facet_grid(. ~ Diet, scale = "free") +
-    scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
-    scale_color_manual(values = pal.Set1[c(4,1,2)]) + 
+    scale_fill_manual(values = col.Exp) +
+    scale_color_manual(values = col.Exp) + 
     labs(
       # title = "",
-      # caption = "",
+      caption = alpha.metric,
       x = "Treatment",
       y = "Alpha Score (normalized)"
     ) +
-      ggpubr::stat_pvalue_manual(plot.sig.labs[["Shannon"]],
+      ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha.metric]],
                                label = "p.adj.signif",
                                size = 6,
                                bracket.size = 1,
-                               y.position = 1
-                               # y.position = c(.85, .95,1.075,
-                               #                .9, 1,1.15,
-                               #                1, 1.1,1.2)
+                               # y.position = 1
+                               y.position = c(1, 1.1,1.2,
+                                              .9, 1,1.15,
+                                              1, 1.1,1.2)
                                ) +
     scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
                        limits = c(0, 1.2)) + 
@@ -1777,6 +2274,19 @@ tukey.test.list %>%
 
 
 ### Beta Diversity
+
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Beta"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
 
 #### Exposure
 
@@ -1968,38 +2478,84 @@ anova <- beta_anova(beta.model = mod,
 dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
 beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
 beta.axis.full <- axis_labels(dt.ord.full.beta)
-p.val <- anova$p.value[anova$metric == "Bray-Curtis"][1]
-p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
-cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords$CAP2)
-cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords$CAP2)
 
 
+Supp.Fig.3.d.1 <- lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
 
-Supp.Fig.3.d <-
+
   dt.ord.full.beta[[beta]]$sample.coords %>%
-    ggplot(aes(x = CAP1, y = CAP2)) +
-      stat_ellipse(aes(color = Diet )) +
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet, linetype = PrePostExp )) +
       geom_point(aes(color = Diet,
                      shape = PrePostExp),
+                 # shape = 21,
                  size = 2.5,
-                 stroke = 1,
-                 alpha = 1 ) +
+                 alpha = 1) +
       annotate("text", 
+               # label = paste0(beta.metric, "; ", p.val.label),
                label = p.val.label,
                x = cap.max, y = cap.min, 
                size = 5, 
                color = "black",
                hjust = .95
       ) +
-      scale_fill_manual(values = pal.Dark2) +
-      scale_color_manual(values = pal.Dark2)  + 
-      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
-      scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      scale_fill_manual(name = "Exposure", values = col.Diet) +
+      scale_color_manual(name = "Diet", values = col.Diet)  + 
+      scale_shape_manual(name = "Exposure", values = c(19, 1)) +
+      scale_linetype_manual(name = "Exposure", values = c("solid", "dotted")) +
       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
-           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
       theme(legend.position = "bottom")
 
-Fig.3.d
+})
+  
+Supp.Fig.3.d.1 
+
+
+Supp.Fig.3.d.2 <- lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = PrePostExp, linetype = Diet )) +
+      geom_point(aes(color = PrePostExp,
+                     shape = Diet),
+                 # shape = 21,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               # label = paste0(beta.metric, "; ", p.val.label),
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_linetype_manual(name = "Diet", values = c("solid", "dashed", "dotted")) +
+      scale_fill_manual(name = "Diet", values = col.Diet) +
+      scale_color_manual(name = "Exposure", values = col.Exp[c(2,3)])  + 
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom") 
+
+})
+
+# Supp.Fig.3.d.1 
+Supp.Fig.3.d.2 
+
+##
 
 stats_table(anova) %>%
   set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diets:Exposure"))
@@ -2197,7 +2753,7 @@ lapply(ord.beta, function(beta){
 Fig.3.e <- 
   data.da %>%
   # filter(Alpha.Metric == "Shannon") %>%
-    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Exposed", "Unexposed")),
+    ggplot(aes(x=factor(PrePostExp, level = c("Pre-exposure", "Unexposed", "Exposed")),
                y = log(value),
                )) +
     geom_boxplot(aes(fill = PrePostExp)) +

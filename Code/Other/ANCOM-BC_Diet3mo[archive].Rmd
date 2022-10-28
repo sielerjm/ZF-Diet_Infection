@@ -1,0 +1,395 @@
+---
+title: "ANCOM-BC"
+author: "Michael Sieler"
+date: "2022-08-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = NA, 
+                      fig.width = 6.25, fig.height = 5)
+
+
+
+# if (!requireNamespace("BiocManager", quietly=TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("ANCOMBC")
+
+
+# library(ANCOMBC)
+# library(tidyverse)
+library(microbiome)
+# library(magrittr)
+# library(qwraps2)
+# library(corrplot)
+# library(limma)
+# library(ggforce)
+# library(DT)
+
+
+# Tutorial
+#  https://bioconductor.org/packages/devel/bioc/vignettes/ANCOMBC/inst/doc/ANCOMBC.html
+
+```
+
+
+## Diet 
+
+### Load Data
+
+```{r data1}
+# data(atlas1006) 
+# Subset to baseline
+pseq = ps.T0 #%>% subset_samples(Diet == "Gemma")
+data = dt.T0 #%>% subset(Diet == "Gemma")
+
+# Relevel
+
+# 
+# levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Unexposed", "Exposed"))
+# data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Unexposed")
+# 
+# 
+# levels(sample_data(pseq)$PrePostExp) <- factor(levels(sample_data(pseq)$PrePostExp),levels = c("Unexposed", "Exposed"))
+# sample_data(pseq)$PrePostExp <- relevel(factor(sample_data(pseq)$PrePostExp), ref = "Unexposed")
+# 
+# # ADD INTERACTION
+# sample_data(pseq) <- microbiome::meta(pseq) %>%
+#   mutate(Diet.Exp = paste0(Diet,".",PrePostExp), .after = Age) 
+# 
+# data <- data %>%
+#   mutate(Diet.Exp = paste0(Diet,".",PrePostExp), .after = Age)
+# 
+# # Sanity check counts are correct
+# 
+# microbiome::meta(pseq) %>%
+#   group_by(Diet.Exp) %>%
+#   count()
+
+
+# Genus level data
+genus_data = aggregate_taxa(pseq, "Genus")
+# Family level data
+family_data = aggregate_taxa(pseq, "Family")
+# Phylum level data
+phylum_data = aggregate_taxa(pseq, "Phylum")
+
+# print(genus_data)
+# print(family_data)
+# print(phylum_data)
+```
+
+
+### Run AncomBC
+
+```{r}
+
+# Create Dataframes
+
+tax.level = genus_data #phylum_data
+tax.label = "Genus"
+tax.data = taxa.data.table(tax.level)
+
+out = ancombc2(data = tax.level, 
+               tax_level = "Genus",
+              fix_formula = "Diet", 
+              p_adj_method = "BH", 
+              # lib_cut = 0, 
+              # prv_cut = 0,
+              group = "Diet", # Set variable if "struct_zero = T". (e.g. you had two groups treated or not with antibiotics. "Antibiotics")
+              # struc_zero = F,  # Set true if you expect certain treatments to select against certain taxa (e.g. antibiotics, germ-free)
+              neg_lb = ifelse(tax.label == "Genus", F, T),  # F is more conservative, Set to F with ASV/Genus level, Set T with higher tax (e.g. Family, Phylum)
+              global = T
+              #assay_name = "counts"
+              )
+
+res = out$res
+res_global = out$res_global
+
+
+```
+
+
+## Global
+
+### Data wrangling
+
+```{r}
+
+# Global
+
+tab_w = res_global[, "W", drop = FALSE]
+tab_p = res_global[, "p_val", drop = FALSE]
+tab_q = res_global[, "q_val", drop = FALSE]
+tab_diff = res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = out$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.level) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+                     dplyr::select(Sample, Diet),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.label, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.label)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+```
+
+### Visualization
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/DiffAb"),
+          device = "png" #,
+          # width = 5,
+          # height = 5,
+          # units = "in"
+          )
+
+```
+
+#### Heatmap
+
+```{r}
+p_heat_diet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.label ,")"),
+       caption = "3 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+p_heat_diet
+
+  
+
+
+```
+
+#### Table
+
+
+```{r}
+
+
+
+diffAbund_statsTable(tab_w, tab_p, tab_q, tab_diff, "3mo, controls", sig_taxa) %>%
+  save_as_image(path = paste0(path.figures, "/S_Fig-DiffAb_3moCtrl_Table.png"))
+
+
+
+
+```
+
+#### Misc Tables
+
+```{r}
+tab_w %>%
+    tibble::rownames_to_column("Taxon") %>%
+    left_join(., tab_p %>% tibble::rownames_to_column("Taxon"), by = "Taxon") %>%
+    left_join(., tab_q %>% tibble::rownames_to_column("Taxon"), by = "Taxon") %>%
+    left_join(., tab_diff %>% tibble::rownames_to_column("Taxon"), by = "Taxon") %>%
+    filter(Taxon %in% sig_taxa) %>%
+    rename_with(~tax.label, Taxon) %>%
+    left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.label) %>%
+    group_by(Phylum) %>% count() %>% arrange(-n)
+
+tab_w %>%
+    tibble::rownames_to_column("Taxon") %>%
+    left_join(., tab_p %>% tibble::rownames_to_column("Taxon"), by = "Taxon") %>%
+    left_join(., tab_q %>% tibble::rownames_to_column("Taxon"), by = "Taxon") %>%
+    left_join(., tab_diff %>% tibble::rownames_to_column("Taxon"), by = "Taxon") %>%
+    filter(Taxon %in% sig_taxa) %>%
+    rename_with(~tax.label, Taxon) %>%
+    left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.label) %>%
+    group_by(Class) %>% count() %>% arrange(-n)
+
+
+
+```
+
+```{r}
+
+df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.label ,")"),
+       caption = "3 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+```
+
+#### Lollipop
+
+```{r}
+
+# lolliplot <-
+  df_plot %>%
+    as.data.frame %>%
+    # dplyr::select(-1) %>%
+    pivot_wider(names_from = Diet, values_from = "value") %>% arrange(Taxon) %>%
+    mutate(max.value = pmax(Gemma, Watts, ZIRC), # https://stackoverflow.com/a/32978686
+           min.value = pmin(Gemma, Watts, ZIRC)) %>%
+    mutate(direction = case_when(Gemma == max.value ~ "negative",
+                                 Gemma == min.value ~ "positive",
+                                 Gemma != min.value & Gemma != max.value ~ "neutral")) %>%
+    mutate(mid.value = mean(max.value + min.value)) %>%
+    mutate(direction = fct_relevel(direction, c("positive", "neutral", "negative"))) %>%
+    
+    ggplot() +
+    
+    geom_point(data = df_plot, aes(y = Taxon, x = value, fill = Diet), color = "Black", shape = 21, alpha=0, inherit.aes = F, guide = F) + # This disgusting line of code allows me to sneak in "PrePostExp" variables to the legend
+    
+    # geom_segment(aes(y=Taxon, yend=Taxon, x=`min.value`, xend=`max.value`, linetype = direction)) +
+    geom_segment(aes(y=Taxon, yend=Taxon, x=`min.value`, xend=`max.value`), linetype = "solid", guide = F) +
+    
+    geom_point( aes(y=Taxon, x=Gemma), color = col.Diet[1], size = 3 ) +
+    geom_point( aes(y=Taxon, x=Watts), color = col.Diet[2], size = 3 ) +
+    geom_point( aes(y=Taxon, x=ZIRC), color = col.Diet[3], size = 3 ) +
+  
+    facet_grid(as.formula(paste0(ifelse(tax.label == "Phylum", ".", "Phylum"), "~ .")), scales = "free", space = "free", switch="both") +
+    
+    # scale_color_manual(values = c(col.Diet), breaks = c("Gemma", "Watts", "ZIRC"), name = "Diet") +
+    # scale_fill_manual(values = c(col.Diet), breaks = c("Gemma", "Watts", "ZIRC"), name = "Diets") +
+    # scale_linetype_manual(values = c("dotted", "solid", "dashed"), name = "Ref to Diet") +
+    labs(title = paste0("Heat map of bias-corrected log observed abundances (", tax.label ,")"),
+         x = "Abundance (log transformed)",
+         y = "Phyla")
+         # caption = str_wrap("Results from the ANCOM-BC global test showing taxa that are signficantly differentially abundant between at least two groups across diets (Gemma, Watts, and ZIRC) and exposures (Pre-exposure, Exposed, and Unexposed). P.adj = BH."), 80) +
+    # guides(color = guide_legend(title="Diet",
+    #                             override.aes = list(fill = c(col.diet[1],col.diet[2],col.diet[3]))
+    #                             ),
+    #        fill = guide_legend(title="Exposure",
+    #                             override.aes = list(color = c(col.prepostexp[1], col.prepostexp[2], col.prepostexp[3]), 
+    #                                                 fill = c(col.prepostexp[1], col.prepostexp[2], col.prepostexp[3]), 
+    #                                                 alpha = 1, size = 4)
+           #                      ),
+           # size = F,
+           # alpha = F)  +
+    # theme_minimal() +
+    # theme(plot.title = element_text(hjust = 0.5),
+    #       plot.caption = element_text(hjust = 0),
+    #       strip.text.y.left = element_text(angle = 0)
+    #       )
+  
+
+
+
+```
+
+
+## Comparative (proceed with caution)
+
+
+
+### Calculate change
+
+```{r}
+# Log-fold Change
+
+tab_lfc = res$lfc
+tab_se = res$se
+tab_p = res$p_val
+tab_diff = res$diff_abn
+```
+
+
+
+### Visualization
+
+#### Prep
+
+```{r}
+df_lfc = data.frame(res$lfc * res$diff_abn, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+df_se = data.frame(res$se * res$diff_abn, check.names = FALSE) %>% 
+  rownames_to_column("Taxon_id")
+colnames(df_se)[-1] = paste0(colnames(df_se)[-1], "SE")
+```
+
+#### Plot
+
+```{r}
+df_fig_exposure = df_lfc %>% 
+  dplyr::left_join(df_se, by = "Taxon_id") %>%
+  # dplyr::transmute(taxon_id, bmi = bmi_groupobese, bmiSE = bmi_groupobeseSE) %>%
+  filter(if_any(contains("PrePostExpExposed"), ~ . != 0)) %>%
+  dplyr::arrange(desc(PrePostExpExposed)) %>%
+  dplyr::mutate(direct = ifelse(PrePostExpExposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_exposure$Taxon_id = factor(df_fig_exposure$Taxon_id, levels = df_fig_exposure$Taxon_id)
+df_fig_exposure$direct = factor(df_fig_exposure$direct, 
+                        levels = c("Positive LFC", "Negative LFC"))
+  
+p_exposure = ggplot(data = df_fig_exposure, 
+           aes(x = Taxon_id, y = PrePostExpExposed, fill = direct, color = direct)) + 
+  geom_bar(stat = "identity", width = 0.7, 
+           position = position_dodge(width = 0.4)) +
+  geom_errorbar(aes(ymin = PrePostExpExposed - PrePostExpExposedSE, ymax = PrePostExpExposed + PrePostExpExposedSE), width = 0.2,
+                position = position_dodge(0.05), color = "black") + 
+  labs(x = NULL, y = "Log fold change", 
+       title = "Waterfall Plot") + 
+  scale_fill_discrete(name = NULL) +
+  scale_color_discrete(name = NULL) +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5),
+        panel.grid.minor.y = element_blank(),
+        axis.text.x = element_text(angle = 60, hjust = 1))
+
+p_exposure
+```
+

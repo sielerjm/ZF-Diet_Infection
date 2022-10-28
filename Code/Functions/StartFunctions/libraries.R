@@ -29,7 +29,8 @@ library(ggrepel)  # Adds label buffering to labels so they don't overlap, geom_l
 # # library(gridExtra)  # Miscellaneous Functions for "Grid" Graphics
 library(RColorBrewer)  # Making and using pretty color palettes
 library(rstatix)
-library(webshot)  # Export figures
+library(webshot)  # Export stats tables
+library(camcorder)  # Export Ggplots
 
 
 # Microbiome --------------------------------------------------------------

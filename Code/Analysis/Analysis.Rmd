@@ -51,7 +51,7 @@ df.all %>%
 
 <!-- # Main Figures -->
 
-## Diet (3mo)
+## Diet (4mo)
 
 ```{r}
 
@@ -59,24 +59,29 @@ data <- df.T0
 data.alpha <- dt.alphaPlus.T0.melt
 ps.obj <- ps.T0
 dist <- distList.T0
+data.diffAb <- diffAb.conT0
 
 levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
 data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
-
-
-# Plot output settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/Physiology"),
-          device = "png",
-          width = 5,
-          height = 5,
-          units = "in"
-          )
 
 
 ```
 
 
 ### Physiology
+
+```{r}
+# Plot output settings
+tmp.path <- "gg_Record/Diet_7moCtrl/Physiology"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
 
 #### Weight
 
@@ -400,7 +405,7 @@ test %>%
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/Alpha"),
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_4moCtrl/Alpha"),
           device = "png",
           width = 5,
           height = 5,
@@ -451,7 +456,7 @@ Fig.1.c <- lapply(methods.alpha, function(alpha){
     scale_color_manual(values = pal.Set1) + 
     labs(
       # title = "",
-      caption = paste0(alpha," (3mo)"),
+      caption = paste0(alpha," (4mo)"),
       x = "Diet",
       y = "Alpha Score (normalized)"
     ) +
@@ -526,7 +531,7 @@ tukey.test.list %>%
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_3moCtrl/Beta"),
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_4moCtrl/Beta"),
           device = "png",
           width = 5,
           height = 5,
@@ -605,14 +610,14 @@ stats_table(anova) %>%
 
 data.beta <- lapply(ord.beta, function(beta){
   
-  tmp.ord <- ordinate(
+  tmp.ord <- phyloseq::ordinate(
       physeq = ps.obj, 
       method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
       distance = beta  # c("bray", "canberra", "sor")
     )
   
   tmp.ord.data <- list()
-  tmp.ord.data[[beta]] <- plot_ordination(
+  tmp.ord.data[[beta]] <- phyloseq::plot_ordination(
       physeq = ps.obj,
       ordination = tmp.ord,
       justDF = T
@@ -659,7 +664,243 @@ lapply(beta.disp, function(beta) {
 })
 ```
 
-## Diet (6mo)
+### Differential Abundance
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Diet_4moCtrl/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8.5,
+          height = 11,
+          units = "in"
+          )
+
+```
+
+
+#### Primary
+
+```{r}
+
+```
+
+
+
+#### Global
+
+```{r}
+data.diffAb <- diffAb.conT0
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+p_heat_diet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ .")), scales = "free", space = "free", switch = "both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+p_heat_diet
+
+```
+
+
+
+#### Pairwise
+
+```{r, fig.width=8.5, fig.height=11}
+
+# Dataframes 
+data.diffAb <- diffAb.conT0
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("tax_id") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(tax_id, 
+              `Watts vs. Gemma` = round(lfc_Watts, 2), 
+              `ZIRC vs. Gemma` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Watts vs. Gemma`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(tax_id)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Watts vs. Gemma",
+                                      "ZIRC vs. Gemma",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = tax_id, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, tax_id, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons", 
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+
+# Sensitivity Pairs
+
+sens_pair = tab_sens %>%
+    rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    transmute(sens_pair = `Gemma - Watts`) %>%
+    rownames_to_column("tax_id") %>%
+    left_join(df_pair %>%
+                  transmute(tax_id, 
+                            diff_pair = diff_DietWatts), 
+              by = "tax_id") %>%
+    mutate(group = "Gemma vs. Watts") %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Gemma - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC), 
+                      by = "tax_id") %>%
+            mutate(group = "Gemma vs. ZIRC")
+    ) %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Watts - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC_DietWatts), 
+                      by = "tax_id") %>%
+            mutate(group = "Watts vs. ZIRC")
+    )
+sens_pair$diff_pair = recode(sens_pair$diff_pair * 1, 
+                             `1` = "Significant",
+                             `0` = "Nonsignificant")
+sens_pair$group = factor(sens_pair$group, 
+                         levels = c("Gemma vs. Watts",
+                                    "Gemma vs. ZIRC",
+                                    "Watts vs. ZIRC"))
+
+fig_sens_pair = sens_pair %>%
+    ggplot(aes(x = tax_id, y = sens_pair, color = diff_pair)) +
+    geom_point() +
+    scale_color_brewer(palette = "Dark2", name = NULL) +
+    facet_grid(rows = vars(group), scales = "free") +
+    labs(x = NULL, y = "Sensitivity Score",
+       caption = "(4mo, controls)") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+fig_sens_pair
+
+```
+
+
+
+
+## Diet (7mo)
 
 ```{r}
 
@@ -667,9 +908,334 @@ data <- df.conT1
 data.alpha <- dt.alphaPlus.conT1.melt
 ps.obj <- ps.conT1
 dist <- distList.conT1
+data.diffAb <- diffAb.conT1
 
 levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
 data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+```
+
+### Physiology
+
+#### Weight
+
+##### Diet
+
+
+```{r Diet-Physio-Weight}
+
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Weight ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+Fig.1.a <- 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Weight
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Weight (mg)"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(400, 600, 525)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 625)) + 
+  theme(legend.position = "none")
+
+
+Fig.1.a
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Diet")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_Weight-Diet_7moCtrl.png"))
+
+
+```
+
+##### (SM) Sex
+
+```{r Sex-Physio-Weight}
+
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Weight ~ Sex) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+Supp.Fig.1.a <- 
+  data %>%
+    ggplot(aes(x = Sex, 
+               y = Weight
+               )) +
+    geom_boxplot(aes(fill = Sex)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Weight (mg)"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(500)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 525)) + 
+  theme(legend.position = "none")
+
+
+Supp.Fig.1.a
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Sex")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_Weight-Sex_7moCtrl.png"))
+
+
+```
+
+#### Weight ~ Diet:Sex
+
+
+```{r Diet-Physio-Weight}
+
+test <- data %>%
+  # group_by(Sex) %>%
+  rstatix::wilcox_test(data =., Weight ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+# Fig.1.a <- 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Weight,
+               # fill = Sex
+               )) +
+    geom_boxplot(aes(fill=Sex)) +
+    geom_quasirandom(aes(fill=Sex), shape = 21, dodge.width=.75) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Weight (mg)"
+    ) +
+    ggpubr::stat_pvalue_manual(test,
+                               label = "p.adj.signif",
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(375, 550, 450)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(0, 575)) +
+  theme(legend.position = "bottom")
+
+
+# Fig.1.a
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Diet")) %>%
+  autofit()
+
+
+```
+
+#### BCS ~ Diet:Sex
+
+
+```{r Diet-Physio-Weight}
+
+test <- data %>%
+  # group_by(Sex) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+ 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Body.Condition.Score,
+               # fill = Sex
+               )) +
+    geom_boxplot(aes(fill=Sex)) +
+    geom_boxplot(aes(fill=Sex)) +
+    geom_quasirandom(aes(fill=Sex), shape = 21, dodge.width=.75) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test,
+                               label = "p.adj.signif",
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(2.75, 3, 3.25)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(1, 3.5)) +
+  theme(legend.position = "bottom")
+
+
+
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Diet")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_BodyCondScore-DietSex_7moCtrl.png"))
+
+
+```
+
+
+#### Body Condition Score
+
+##### Diet
+
+```{r Diet-Physio-BCS}
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+
+Fig.1.b <- 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Body.Condition.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(2.75, 3, 3.25)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(1, 3.5)) + 
+  theme(legend.position = "none")
+
+Fig.1.b
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Diet")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_BodyCondScore-Diet_7moCtrl.png"))
+
+```
+
+##### (SM) Sex
+
+```{r Sex-Physio-Weight}
+
+test <- data %>%
+  # group_by(Diet) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Sex) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+Supp.Fig.1.b <- 
+  data %>%
+    ggplot(aes(x = Sex, 
+               y = Body.Condition.Score
+               )) +
+    geom_boxplot(aes(fill = Sex)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test, 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(4)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 4)) + 
+  theme(legend.position = "none")
+
+
+Supp.Fig.1.b
+
+test %>% 
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Sex")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_BodyCondScore-Sex_7moCtrl.png"))
+
 
 ```
 
@@ -678,7 +1244,8 @@ data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_6moCtrl/Alpha"),
+tmp.path <- "gg_Record/Diet_7moCtrl/Alpha"
+gg_record(dir = file.path(path.figures, tmp.path),
           device = "png",
           width = 5,
           height = 5,
@@ -728,7 +1295,7 @@ Fig.1.c <- lapply(methods.alpha, function(alpha){
     scale_color_manual(values = pal.Set1) + 
     labs(
       # title = "",
-      caption = paste0(alpha," (6mo)"),
+      caption = paste0(alpha," (7mo)"),
       x = "Diet",
       y = "Alpha Score (normalized)"
     ) +
@@ -766,7 +1333,9 @@ lapply(methods.alpha, function(x){
   merge_v(j = 1)  %>%
   set_formatter(values = list("p.value" = p_val_format) ) %>%
   hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
-  set_caption(paste0("glm(Alpha.Score ~ Diet), family = quasibinomial)"))
+  set_caption(paste0("glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "GLM-Mod_Alpha-Diet_7moCtrl.png"))
 
 # Anova
 lapply(methods.alpha, function(x){
@@ -781,7 +1350,8 @@ lapply(methods.alpha, function(x){
     merge_v(j = 1) %>%
     set_formatter(values = list("p.value" = p_val_format) ) %>%
     set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet), family = quasibinomial) )")) %>%
-    autofit()
+    autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "ANOVA_Alpha-Diet_7moCtrl.png"))
 
 # Tukey's Pairwise Comparison
 tukey.test.list %>%
@@ -793,7 +1363,8 @@ tukey.test.list %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
   hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
   set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
-  autofit()
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Tukey_pairwise_Alpha-Diet_7moCtrl.png"))
 
 ```
 
@@ -803,7 +1374,8 @@ tukey.test.list %>%
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_6moCtrl/Beta"),
+tmp.path <- "gg_Record/Diet_7moCtrl/Beta"
+gg_record(dir = file.path(path.figures, "gg_Record/Diet_7moCtrl/Beta"),
           device = "png",
           width = 5,
           height = 5,
@@ -866,7 +1438,7 @@ Fig.1.d <- lapply(methods.beta, function(beta){
       scale_color_manual(name = "Diet", values = col.Diet)  + 
       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
            y = dt.ord.full.beta[[beta]]$axes.labs[2],
-           caption = beta) + 
+           caption = paste0(beta, " (7mo)")) + 
       theme(legend.position = "bottom")
 })
 
@@ -875,24 +1447,26 @@ Fig.1.d <- lapply(methods.beta, function(beta){
 Fig.1.d
 
 stats_table(anova) %>%
-  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet"))
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_PERMANOVA_Beta-Diet_7moCtrl.png"))
 
 ```
 
 #### (SM) Beta-Dispersion
 
 ```{r}
+ord.beta <- c("bray", "canberra")
 
 data.beta <- lapply(ord.beta, function(beta){
   
-  tmp.ord <- ordinate(
+  tmp.ord <- phyloseq::ordinate(
       physeq = ps.obj, 
       method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
       distance = beta  # c("bray", "canberra", "sor")
     )
   
   tmp.ord.data <- list()
-  tmp.ord.data[[beta]] <- plot_ordination(
+  tmp.ord.data[[beta]] <- phyloseq::plot_ordination(
       physeq = ps.obj,
       ordination = tmp.ord,
       justDF = T
@@ -940,6 +1514,230 @@ lapply(beta.disp, function(beta) {
 ```
 
 
+### Differential Abundance
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Diet_7moCtrl/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8.5,
+          height = 11,
+          units = "in"
+          )
+
+```
+
+
+#### Global
+
+```{r}
+
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+p_heat_diet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ .")), scales = "free", space = "free", switch = "both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+p_heat_diet
+```
+
+
+
+#### Pairwise
+
+```{r, fig.width=8.5, fig.height=11}
+
+# Dataframes 
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("tax_id") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(tax_id, 
+              `Gemma vs. Watts` = round(lfc_Watts, 2), 
+              `Gemma vs. ZIRC` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma vs. Watts`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(tax_id)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Gemma vs. Watts",
+                                      "Gemma vs. ZIRC",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = tax_id, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, tax_id, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons",
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+
+# Sensitivity Pairs
+
+sens_pair = tab_sens %>%
+    rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    transmute(sens_pair = `Gemma - Watts`) %>%
+    rownames_to_column("tax_id") %>%
+    left_join(df_pair %>%
+                  transmute(tax_id, 
+                            diff_pair = diff_DietWatts), 
+              by = "tax_id") %>%
+    mutate(group = "Gemma vs. Watts") %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Gemma - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC), 
+                      by = "tax_id") %>%
+            mutate(group = "Gemma vs. ZIRC")
+    ) %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Watts - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC_DietWatts), 
+                      by = "tax_id") %>%
+            mutate(group = "Watts vs. ZIRC")
+    )
+sens_pair$diff_pair = recode(sens_pair$diff_pair * 1, 
+                             `1` = "Significant",
+                             `0` = "Nonsignificant")
+sens_pair$group = factor(sens_pair$group, 
+                         levels = c("Gemma vs. Watts",
+                                    "Gemma vs. ZIRC",
+                                    "Watts vs. ZIRC"))
+
+fig_sens_pair = sens_pair %>%
+    ggplot(aes(x = tax_id, y = sens_pair, color = diff_pair)) +
+    geom_point() +
+    scale_color_brewer(palette = "Dark2", name = NULL) +
+    facet_grid(rows = vars(group), scales = "free") +
+    labs(x = NULL, y = "Sensitivity Score",
+       caption = "(4mo, controls)") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+fig_sens_pair
+
+```
+
+
 ## Development
 
 ```{r}
@@ -948,9 +1746,14 @@ data <- df.conT0T1
 data.alpha <- dt.alphaPlus.conT0T1.melt
 ps.obj <- ps.conT0T1
 dist <- distList.conT0T1
+# data.diffAb <- diffAb.conT0T1_DietTime
+# data.diffAb <- diffAb.conT0T1_Time
 
-levels(data.alpha$Timepoint) <- factor(levels(data.alpha$Timepoint), levels = c("3mpf", "6mpf"))
-data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "3mpf")
+levels(data.alpha$Timepoint) <- factor(levels(data.alpha$Timepoint), levels = c("4mpf", "7mpf"))
+data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "4mpf")
+
+levels(data$Timepoint) <- factor(levels(data$Timepoint), levels = c("4mpf", "7mpf"))
+data$Timepoint <- relevel(factor(data$Timepoint), ref = "4mpf")
 
 ```
 
@@ -959,7 +1762,7 @@ data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "3mpf")
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_3mo6moCtrl/Alpha"),
+gg_record(dir = file.path(path.figures, "gg_Record/Dev_4mo7moCtrl/Alpha"),
           device = "png",
           width = 5,
           height = 5,
@@ -1192,7 +1995,7 @@ tukey.test.list %>%
   merge_v(j = 1) %>%
   set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
   hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
-  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Timepoint), family = quasibinomial)")) %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet:Timepoint), family = quasibinomial)")) %>%
   autofit()
 
 
@@ -1203,7 +2006,7 @@ tukey.test.list %>%
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_3mo6moCtrl/Beta"),
+gg_record(dir = file.path(path.figures, "gg_Record/Dev_4mo7moCtrl/Beta"),
           device = "png",
           width = 5,
           height = 5,
@@ -1720,7 +2523,7 @@ lapply(beta.disp, function(beta) {
 ```{r}
 
 # Plot settings
-gg_record(dir = file.path(path.figures, "gg_Record/Diet_3mo6moCtrl/Physiology"),
+gg_record(dir = file.path(path.figures, "gg_Record/Dev_4mo7moCtrl/Physiology"),
           device = "png",
           width = 5,
           height = 5,
@@ -1926,53 +2729,581 @@ stats_table(anova) %>%
 ### Differential Abundance
 
 ```{r}
-res_global.TIME %>%
-  tibble::rownames_to_column("Taxon") %>%
-  filter(diff_abn == TRUE) %>%
-  flextable() %>%
-  align(j = 1:5, align = "right") %>%
-  colformat_double(j = 2, digits = 3) %>%
-  colformat_double(j = 3:4, digits = 4) %>%
-  set_formatter(values = list("p_val" = p_val_format,
-                              "q_val" = p_val_format) )
+
+# Plot settings
+tmp.path <- "gg_Record/Dev4mo7moCtrl/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8.5,
+          height = 11,
+          units = "in"
+          )
+
 ```
 
 
-#### (SM) Diff Abundance
+#### Global
 
 ```{r}
 
-df_fig_time = df_lfc.time %>% 
-  dplyr::left_join(df_se.diets, by = c("Taxon_id", "Diet"), suffix = c("", ".SE")) %>%
-  filter(if_any(contains("value"), ~ . != 0)) %>%
-  dplyr::arrange(desc(value)) %>%
-  dplyr::mutate(direct = ifelse(value > 0, "Positive LFC", "Negative LFC"))
-# df_fig_diets$Taxon_id = df_fig_diets %>%
-#   group_by(Taxon_id, Diet) %>% 
-#   factor(levels = df_fig_diets$Taxon_id)
-df_fig_diets$direct = factor(df_fig_diets$direct, 
-                        levels = c("Positive LFC", "Negative LFC"))
-  
-plot =
-ggplot(data = df_fig_time, 
-           aes(x = reorder(Taxon_id, -value, FUN = mean), y = value, fill = Diet, color = Diet), group = Diet) + 
-  geom_bar(stat = "identity", 
-           position = position_dodge2(width = 1, preserve = "single"), width = .4) +
-  geom_errorbar(aes(ymin = value - value.SE, ymax = value + value.SE), width = 0.4,
-                position = position_dodge2(width = 1, preserve = "single"), color = "black") +
-  labs(x = NULL, y = "Log fold change",
-       title = paste0("Waterfall Plot of Diet:Time (", tax.label, ")")) +
-  scale_fill_manual(values = pal.Dark2) +
-  scale_color_manual(values = pal.Dark2) +
-  theme_bw() +
+data.diffAb <- diffAb.conT0T1_DietTime
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet, Timepoint, Diet.Time),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet", "Timepoint", "Diet.Time"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet.Time, Diet, Timepoint, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+p_heat_plotDiet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ Timepoint")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Timepoint, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5),
-        panel.grid.minor.y = element_blank(),
-        axis.text.x = element_text(angle = 60, hjust = 1)
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
         )
 
-plot
+
+p_heat_plotTime = df_plot %>%
+  ggplot(aes(x = Timepoint, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Diet, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Timepoint, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotDiet
+p_heat_plotTime
 
 ```
+
+
+
+#### Pairwise
+
+```{r, fig.width=8.5, fig.height=11}
+
+# Dataframes 
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("tax_id") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(tax_id, 
+              `Gemma vs. Watts` = round(lfc_Watts, 2), 
+              `Gemma vs. ZIRC` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma vs. Watts`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(tax_id)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Gemma vs. Watts",
+                                      "Gemma vs. ZIRC",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = tax_id, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, tax_id, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons",
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+
+# Sensitivity Pairs
+
+sens_pair = tab_sens %>%
+    rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    transmute(sens_pair = `Gemma - Watts`) %>%
+    rownames_to_column("tax_id") %>%
+    left_join(df_pair %>%
+                  transmute(tax_id, 
+                            diff_pair = diff_DietWatts), 
+              by = "tax_id") %>%
+    mutate(group = "Gemma vs. Watts") %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Gemma - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC), 
+                      by = "tax_id") %>%
+            mutate(group = "Gemma vs. ZIRC")
+    ) %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Watts - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC_DietWatts), 
+                      by = "tax_id") %>%
+            mutate(group = "Watts vs. ZIRC")
+    )
+sens_pair$diff_pair = recode(sens_pair$diff_pair * 1, 
+                             `1` = "Significant",
+                             `0` = "Nonsignificant")
+sens_pair$group = factor(sens_pair$group, 
+                         levels = c("Gemma vs. Watts",
+                                    "Gemma vs. ZIRC",
+                                    "Watts vs. ZIRC"))
+
+fig_sens_pair = sens_pair %>%
+    ggplot(aes(x = tax_id, y = sens_pair, color = diff_pair)) +
+    geom_point() +
+    scale_color_brewer(palette = "Dark2", name = NULL) +
+    facet_grid(rows = vars(group), scales = "free") +
+    labs(x = NULL, y = "Sensitivity Score",
+       caption = "(4mo, controls)") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+fig_sens_pair
+
+```
+
+#### Primary
+
+##### Gemma
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_Gemma
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Timepoint")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months in Gemma diet") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[1], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Log fold change in abundance")) %>%
+  autofit()
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id)
+```
+
+##### Watts
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_Watts
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Timepoint")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months in Watts diet") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[2], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Log fold change in abundance")) %>%
+  autofit()
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id)
+
+```
+
+##### ZIRC
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_ZIRC
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Timepoint")) 
+
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months in ZIRC diet") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[3], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Log fold change in abundance")) %>%
+  autofit()
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id)
+
+```
+
+##### Time
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_Time
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Timepoint")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months across all diets") + 
+    scale_fill_manual(name = NULL, values = c(col.Time[2], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Log fold change in abundance")) %>%
+  autofit()
+
+
+df_fig_plot %>%
+  select(tax_id, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(tax_id)
+
+
+```
+
+
+##### Diet:Time
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_DietTime
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+
+res_prim <- data.diffAb$res
+
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "Diet.TimeGemma.4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Diet.Time")) 
+
+
+
+df_fig_plot = df_plot %>%
+    filter((diff_Diet.TimeGemma.7mpf == 1 & 
+              diff_Diet.TimeGemma.4mpf == 0 & 
+              diff_Diet.TimeWatts.7mpf == 0 & 
+              diff_Diet.TimeWatts.4mpf == 0 & 
+              diff_Diet.TimeZIRC.7mpf == 0 & 
+              diff_Diet.TimeZIRC.4mpf == 0) | 
+           (diff_Diet.TimeWatts.7mpf == 1 & 
+              diff_Diet.TimeGemma.4mpf == 0 & 
+              diff_Diet.TimeGemma.7mpf == 0 & 
+              diff_Diet.TimeWatts.4mpf == 0 & 
+              # diff_Diet.TimeWatts.7mpf == 0 & 
+              diff_Diet.TimeZIRC.4mpf == 0 & 
+              diff_Diet.TimeZIRC.7mpf == 0) | 
+           (diff_Diet.TimeZIRC.7mpf == 1 & 
+              diff_Diet.TimeGemma.4mpf == 0 & 
+              diff_Diet.TimeGemma.7mpf == 0 & 
+              diff_Diet.TimeWatts.4mpf == 0 & 
+              diff_Diet.TimeWatts.7mpf == 0 & 
+              diff_Diet.TimeZIRC.4mpf == 0 #& 
+              # diff_Diet.TimeZIRC.7mpf == 0
+              ) 
+           ) %>%
+    mutate(lfc_Diet.TimeGemma.7mpf = ifelse(diff_Diet.TimeGemma.7mpf == 1, 
+                                   lfc_Diet.TimeGemma.7mpf, 0),
+           lfc_Diet.TimeWatts.7mpf = ifelse(diff_Diet.TimeWatts.7mpf == 1, 
+                             lfc_Diet.TimeWatts.7mpf, 0),
+           lfc_Diet.TimeZIRC.7mpf = ifelse(diff_Diet.TimeZIRC.7mpf == 1, 
+                             lfc_Diet.TimeZIRC.7mpf, 0)) %>%
+    transmute(tax_id, 
+              # `Gemma (4 vs 7 mpf)` = round(lfc_Diet.TimeGemma.7mpf, 2),
+              # `Watts (4 vs 7 mpf)` = round(lfc_Diet.TimeWatts.7mpf, 2),
+              # `ZIRC (4 vs 7 mpf)` = round(lfc_Diet.TimeZIRC.7mpf, 2)
+              `Gemma (7 mpf)` = round(lfc_Diet.TimeGemma.7mpf, 2),
+              `Watts (7 mpf)` = round(lfc_Diet.TimeWatts.7mpf, 2),
+              `ZIRC (7 mpf)` = round(lfc_Diet.TimeZIRC.7mpf, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma (7 mpf)`:`Watts (7 mpf)`:`ZIRC (7 mpf)`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(tax_id)
+  
+lo = floor(min(df_fig_plot$value))
+up = ceiling(max(df_fig_plot$value))
+mid = (lo + up)/2
+fig_plot = df_fig_plot %>%
+  ggplot(aes(x = group, y = tax_id, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, tax_id, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = "Log fold changes of uniquely abundant taxa across diets at 7mpf") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+fig_plot
+
+```
+
 
 
 ## Pathogen Exposure
@@ -1990,6 +3321,8 @@ data.da <-
   df_sig %>%
     filter(Taxon == "Mycobacterium") %>%
     mutate(value = exp(value)) 
+
+data.diffAb <- diffAb.Exp
 
 # Relevel
 levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
@@ -2012,6 +3345,79 @@ data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
 
 
 ```
+
+### (SM) Infection
+
+#### Diet
+
+```{r}
+
+tmp.path <- "gg_Record/Exposure/Infection"
+
+xtab <- as.table(rbind(c(8, 6), c(8,7), c(12, 3)))
+dimnames(xtab) <- list(
+  Diet = c("Gemma", "Watts", "ZIRC"),
+  Pathology.Results = c("Positive", "Negative")
+)
+xtab
+
+stat.test <- pairwise_fisher_test(xtab, detailed = TRUE, p.adjust.method = "BH")
+
+data %>%
+  filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results = 
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet) %>%
+  count(name = "Count") %>%
+  pivot_wider(data = ., names_from = Pathology.Results, values_from = Count) %>%
+  group_by(Diet) %>%
+  summarize(Proportion = Positive/(Negative + Positive)) %>%
+  ggplot(aes(x = Diet, y = Proportion)) +
+  geom_bar(aes(fill = Diet), stat = "identity", position = position_dodge2(preserve = "single"), width = .9) +
+  # facet_grid(. ~ Diet) +
+  scale_fill_manual(values = pal.Dark2) +
+  labs(
+    # title = "",
+    caption = "7mo, exposed",
+    x = "Diet",
+    y = "Proportion of positive infections"
+  ) +
+  ggpubr::stat_pvalue_manual(stat.test, 
+                             label = "p.adj.signif", 
+                             size = 6,
+                             bracket.size = 1,
+                             y.position = c(.75, .9, 1.05)) +
+  geom_text(
+    stat = "identity",
+    aes(label = round(Proportion, 3)),
+    size = 6,
+    vjust = 2
+  ) +
+  scale_y_continuous(breaks = scales::breaks_pretty(n = 6), 
+                     limits = c(0, 1.1)) + 
+  theme(legend.position = "none")
+
+stat.test %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = c(4:7, 10), digits = 3) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Pairwise Fisher Test. p. adj: BH. Pathology.Results ~ Diet")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "PairwiseFisherTest_PathResults-Diet_7moExp.png"))
+
+```
+
+
+
+
+
 
 ### Alpha Diversity
 
@@ -2723,7 +4129,415 @@ lapply(ord.beta, function(beta){
 
 ### Differential Abundance
 
-#### Exposure:Diets
+#### Global
+
+```{r}
+
+data.diffAb = diffAb.all_DietPrePostExp
+
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet, PrePostExp),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet", "PrePostExp", "Diet.Exp"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet, PrePostExp, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+p_heat_plotDiet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ PrePostExp")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ PrePostExp, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotExp = df_plot %>%
+  ggplot(aes(x = PrePostExp, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Diet, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(PrePostExp, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotDiet
+p_heat_plotExp
+
+```
+
+
+
+#### Pairwise
+
+```{r, fig.width=8.5, fig.height=11}
+
+data.diffAb = diffAb.all_PrePostExp
+
+# Dataframes 
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("tax_id") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(tax_id, 
+              `Gemma vs. Watts` = round(lfc_Watts, 2), 
+              `Gemma vs. ZIRC` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma vs. Watts`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(tax_id)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Gemma vs. Watts",
+                                      "Gemma vs. ZIRC",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = tax_id, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, tax_id, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons",
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+
+# Sensitivity Pairs
+
+sens_pair = tab_sens %>%
+    rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    transmute(sens_pair = `Gemma - Watts`) %>%
+    rownames_to_column("tax_id") %>%
+    left_join(df_pair %>%
+                  transmute(tax_id, 
+                            diff_pair = diff_DietWatts), 
+              by = "tax_id") %>%
+    mutate(group = "Gemma vs. Watts") %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Gemma - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC), 
+                      by = "tax_id") %>%
+            mutate(group = "Gemma vs. ZIRC")
+    ) %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Watts - ZIRC`) %>%
+            rownames_to_column("tax_id") %>%
+            left_join(df_pair %>%
+                          transmute(tax_id, 
+                                    diff_pair = diff_DietZIRC_DietWatts), 
+                      by = "tax_id") %>%
+            mutate(group = "Watts vs. ZIRC")
+    )
+sens_pair$diff_pair = recode(sens_pair$diff_pair * 1, 
+                             `1` = "Significant",
+                             `0` = "Nonsignificant")
+sens_pair$group = factor(sens_pair$group, 
+                         levels = c("Gemma vs. Watts",
+                                    "Gemma vs. ZIRC",
+                                    "Watts vs. ZIRC"))
+
+fig_sens_pair = sens_pair %>%
+    ggplot(aes(x = tax_id, y = sens_pair, color = diff_pair)) +
+    geom_point() +
+    scale_color_brewer(palette = "Dark2", name = NULL) +
+    facet_grid(rows = vars(group), scales = "free") +
+    labs(x = NULL, y = "Sensitivity Score",
+       caption = "(4mo, controls)") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+fig_sens_pair
+
+```
+
+
+#### Primary
+
+##### Gemma
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_GemmaExp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Exposure")) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in Unexposed Gemma diet") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[1], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+```
+
+##### Watts
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_WattsExp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Exposure")) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in Unexposed Watts diet") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[2], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+```
+
+
+##### ZIRC
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_ZIRCExp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, contains("Exposure")) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in Unexposed ZIRC diet") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[3], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+```
+
+
+##### PrePostExp
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_Exp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("tax_id") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(tax_id, everything()) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1 ) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$tax_id = factor(df_fig_plot$tax_id, levels = df_fig_plot$tax_id)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = tax_id, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in unexposed across all diets") + 
+    scale_fill_manual(name = NULL, values = c(col.Exp[3], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+```
+
+#### OLD
+
+
 
 ```{r Path-DA-ExpDiets}
 
@@ -2861,7 +4675,7 @@ ggplot(data = data.DiffAb.Exp,
                 position = position_dodge2(width = 1, preserve = "single"), color = "black") +
   labs(x = NULL, y = "Log fold change",
        title = paste0("Log-fold Change of Mycobacterium in Exposed Fish"),
-       caption = "Relative to Unexposed fish at 6 months old") +
+       caption = "Relative to Unexposed fish at 7 months old") +
   scale_fill_manual(values = pal.Dark2) +
   scale_color_manual(values = pal.Dark2) +
   theme_bw() +

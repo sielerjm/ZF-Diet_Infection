@@ -55,8 +55,8 @@ path.figures <- paste0(proj.path, "/Manuscript/Figures")
 # Save Environment
 # save_env(objects.path, ID = analysis.ID, extra_info = "_pipeline_output")
 
-gg_record(dir = file.path(path.figures, "gg_Record"),
-            device = "png")
+# gg_record(dir = file.path(path.figures, "gg_Record"),
+#             device = "png")
 
 ```
 

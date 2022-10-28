@@ -172,6 +172,21 @@ mid = (lo + up)/2
 
 ### Visualization
 
+
+```{r}
+
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/DiffAb"),
+          device = "png" #,
+          # width = 5,
+          # height = 5,
+          # units = "in"
+          )
+
+```
+
+#### Heatmap
+
 ```{r}
 p_heat_diet = df_plot %>%
   ggplot(aes(x = Diet, y = Taxon, fill = value)) + 

@@ -393,52 +393,136 @@ diffAb.conT0T1_ZIRC = run_ancombc2(tmp.pseq = ps.ZIRC.con,
                                     tmp.group = NULL
 )
 
+# Body Condition Score
+
+diffAb.conT0T1_DietBCS = run_ancombc2(tmp.pseq = ps.conT0T1, 
+                                       tmp.taxLevel = tax.level,
+                                       tmp.fixFormula = "Diet + Body.Condition.Score", 
+                                       tmp.randFormula = NULL,
+                                       tmp.group = "Diet", 
+                                       tmp.pairwise = F,
+                                       tmp.mdfdr = NULL
+)
+
+diffAb.conT0T1_ZIRCBCS = run_ancombc2(tmp.pseq = ps.ZIRC.con, 
+                                       tmp.taxLevel = tax.level,
+                                       tmp.fixFormula = "Body.Condition.Score", 
+                                       tmp.randFormula = NULL,
+                                       tmp.group = NULL, 
+                                       tmp.pairwise = F,
+                                       tmp.mdfdr = NULL
+)
+
+diffAb.conT0T1_ZIRCBCS_Phylum = run_ancombc2(tmp.pseq = ps.ZIRC.con, 
+                                      tmp.taxLevel = "Phylum",
+                                      tmp.fixFormula = "Body.Condition.Score", 
+                                      tmp.randFormula = NULL,
+                                      tmp.group = NULL, 
+                                      tmp.pairwise = F,
+                                      tmp.mdfdr = NULL
+)
+
 
 
 
 
 ## Exposure ----------------------------------------------------------------
 
-diffAb.all_DietPrePostExp = run_ancombc2(tmp.pseq = ps.all, 
+tmp.pseq <- ps.all
+sample_data(tmp.pseq)$PrePostExp = factor(sample_data(tmp.pseq)$PrePostExp, levels = c("Unexposed", "Exposed", "Pre-exposure"))
+
+
+diffAb.all_DietPrePostExp = run_ancombc2(tmp.pseq = tmp.pseq, 
                          tmp.taxLevel = tax.level,
                          tmp.fixFormula = paste0(c("Diet", "PrePostExp"), collapse = " + "), 
                          tmp.randFormula = NULL,
                          tmp.group = "Diet"
 )
 
-diffAb.all_PrePostExp = run_ancombc2(tmp.pseq = ps.all, 
+diffAb.all_PrePostExp = run_ancombc2(tmp.pseq = tmp.pseq, 
                                      tmp.taxLevel = tax.level,
                                      tmp.fixFormula = paste0(c("PrePostExp"), collapse = " + "), 
                                      tmp.randFormula = NULL,
                                      tmp.group = "PrePostExp"
 )
 
-diffAb.T1_GemmaExp = run_ancombc2(tmp.pseq = subset_samples(ps.T1, Diet == "Gemma"), 
+tmp.pseq <- ps.T1
+sample_data(tmp.pseq)$PrePostExp = factor(sample_data(tmp.pseq)$Exposure, levels = c("Unexposed", "Exposed"))
+
+diffAb.T1_GemmaExp = run_ancombc2(tmp.pseq = subset_samples(tmp.pseq, Diet == "Gemma"), 
                                     tmp.taxLevel = tax.level,
                                     tmp.fixFormula = paste0(c("Exposure"), collapse = " + "), 
                                     tmp.randFormula = NULL,
                                     tmp.group = NULL
 )
 
-diffAb.T1_WattsExp = run_ancombc2(tmp.pseq = subset_samples(ps.T1, Diet == "Watts"), 
+diffAb.T1_WattsExp = run_ancombc2(tmp.pseq = subset_samples(tmp.pseq, Diet == "Watts"), 
                                     tmp.taxLevel = tax.level,
                                     tmp.fixFormula = paste0(c("Exposure"), collapse = " + "), 
                                     tmp.randFormula = NULL,
                                     tmp.group = NULL
 )
 
-diffAb.T1_ZIRCExp = run_ancombc2(tmp.pseq = subset_samples(ps.T1, Diet == "ZIRC"), 
+diffAb.T1_ZIRCExp = run_ancombc2(tmp.pseq = subset_samples(tmp.pseq, Diet == "ZIRC"), 
                                    tmp.taxLevel = tax.level,
                                    tmp.fixFormula = paste0(c("Exposure"), collapse = " + "), 
                                    tmp.randFormula = NULL,
                                    tmp.group = NULL
 )
 
-diffAb.T1_Exp = run_ancombc2(tmp.pseq = ps.T1, 
+diffAb.T1_Exp = run_ancombc2(tmp.pseq = tmp.pseq, 
                             tmp.taxLevel = tax.level,
                             tmp.fixFormula = paste0(c("Exposure"), collapse = " + "), 
                             tmp.randFormula = NULL,
                             tmp.group = NULL
+)
+
+# ADD INTERACTION
+tmp.pseq <- ps.all
+sample_data(tmp.pseq) <- microbiome::meta(tmp.pseq) %>%
+  mutate(Diet.Exp = paste0(Diet,".",PrePostExp), .after = Age) 
+
+sample_data(tmp.pseq)$PrePostExp = factor(sample_data(tmp.pseq)$PrePostExp, levels = c("Unexposed", "Exposed", "Pre-exposure"))
+
+# Sanity check counts are correct
+
+microbiome::meta(tmp.pseq) %>%
+  group_by(Diet.Exp) %>%
+  count()
+
+
+diffAb.all_Diet.Exp = run_ancombc2(tmp.pseq = tmp.pseq, 
+                                       tmp.taxLevel = tax.level,
+                                       tmp.fixFormula = "Diet.Exp", 
+                                       tmp.randFormula = NULL,
+                                       tmp.group = "Diet.Exp", 
+                                       tmp.pairwise = F,
+                                       tmp.mdfdr = NULL
+)
+
+tmp.pseq <- ps.all
+sample_data(tmp.pseq)$PrePostExp = factor(sample_data(tmp.pseq)$Exposure, levels = c("Unexposed", "Exposed"))
+
+
+diffAb.all_GemmaExp = run_ancombc2(tmp.pseq = subset_samples(tmp.pseq, Diet == "Gemma"), 
+                                  tmp.taxLevel = tax.level,
+                                  tmp.fixFormula = paste0(c("PrePostExp"), collapse = " + "), 
+                                  tmp.randFormula = NULL,
+                                  tmp.group = NULL
+)
+
+diffAb.all_WattsExp = run_ancombc2(tmp.pseq = subset_samples(tmp.pseq, Diet == "Watts"), 
+                                  tmp.taxLevel = tax.level,
+                                  tmp.fixFormula = paste0(c("PrePostExp"), collapse = " + "), 
+                                  tmp.randFormula = NULL,
+                                  tmp.group = NULL
+)
+
+diffAb.all_ZIRCExp = run_ancombc2(tmp.pseq = subset_samples(tmp.pseq, Diet == "ZIRC"), 
+                                 tmp.taxLevel = tax.level,
+                                 tmp.fixFormula = paste0(c("PrePostExp"), collapse = " + "), 
+                                 tmp.randFormula = NULL,
+                                 tmp.group = NULL
 )
 
 

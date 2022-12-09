@@ -1,0 +1,198 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 7 month sampling timepoint comparing control fish fed the three diets. 
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.conT1
+data.alpha <- dt.alphaPlus.conT1.melt
+ps.obj <- ps.conT1
+dist <- distList.conT1
+data.diffAb <- diffAb.conT1
+
+levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
+data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+```
+
+
+
+### Beta Diversity
+
+
+```{r}
+tmp.path <- "gg_Record/Diet_7moCtrl/Beta"
+# Plot settings
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+#### Diets
+
+```{r Diet-Beta-Diets}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+Fig.1.d <- lapply(methods.beta, function(beta){
+
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  # cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  # cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+  cap.min <- -3
+  cap.max <- 1.5
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet),
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Diet", values = col.Diet) +
+      scale_color_manual(name = "Diet", values = col.Diet)  + 
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = paste0(beta, " (7mo)")) + 
+      theme(legend.position = "bottom")
+})
+
+
+
+Fig.1.d
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_7moCtrl.png"))
+
+```
+
+#### (SM) Beta-Dispersion
+
+```{r}
+ord.beta <- c("bray", "canberra")
+
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- phyloseq::ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- phyloseq::plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+```
+
+
+##### Diet
+
+```{r, fig.width=5, fig.height=5}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% boxplot(xlab = "Diet")
+  
+}) 
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-Diet_7moCtrl.png"))
+                )
+   })
+  })
+})
+```

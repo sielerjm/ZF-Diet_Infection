@@ -1,0 +1,763 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing pathogen exposed fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+```{r}
+
+data <- df.all
+data.alpha <- dt.alphaPlus.all.melt
+data.beta <- df.T1
+data.beta2 <- df.all # Includes pre-exposure fish
+ps.obj <- ps.all
+dist <- distList.T1
+dist2 <- distList.all
+
+
+
+# Relevel
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data.beta2$PrePostExp <- relevel(factor(data.beta2$PrePostExp), ref = "Pre-exposure")
+
+levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Unexposed", "Exposed"))
+sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+# 
+# levels(data.da$PrePostExp) <- factor(levels(data.da$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
+
+
+
+```
+
+
+### Differential Abundance
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 12,
+          height = 10,
+          units = "in"
+          )
+
+```
+
+
+#### Global
+
+##### All
+
+```{r}
+
+data.diffAb = diffAb.all_DietPrePostExp
+
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet, PrePostExp),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet", "PrePostExp", "Diet.Exp"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet, PrePostExp, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+df_plot <- df_plot %>%
+  mutate(PrePostExp = fct_relevel(PrePostExp, "Pre-exposure", "Unexposed", "Exposed"))
+
+p_heat_plotDiet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ PrePostExp")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ PrePostExp, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotExp = df_plot %>%
+  ggplot(aes(x = PrePostExp, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Diet, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(PrePostExp, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotDiet
+p_heat_plotExp
+
+
+lapply(c("pdf", "png"), function(ext){
+  data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+    arrange(Taxon) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    hline(j = NULL, part = "body") %>%
+    # hline(i = ~ , j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Summary table of abundant taxa (4-7mo, all), sig taxa = ", length(sig_taxa))) %>%
+    autofit() %>%
+    save_as_image(path = paste0(
+                            file.path(path.figures, 
+                                      tmp.path, 
+                                      "ANCOMBC2-Exp_All."
+                                      ),
+                            ext),  # pdf or png
+                  )
+})
+# save_as_image(path = file.path(path.figures, tmp.path, "ANCOMBC2-Diet_4moCtrl.png"))
+
+
+df_plot %>%
+  select(Diet, Taxon, value) %>%
+  arrange(Diet, Taxon) %>%
+  select(Taxon)
+
+
+```
+
+##### Mycobacterium
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+
+```{r}
+
+df_plot <- lapply(c("Gemma", "Watts", "ZIRC"), function(DIET){
+  eval(parse(text = paste0("diffAb.all_",DIET,"Exp$res"))) %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "PrePostExpExposed", .x, fixed = T)) %>%
+  filter(Taxon == "Mycobacterium") %>%
+  select(-Taxon) %>%
+  pivot_longer(
+    everything(),
+    names_to = c(".value", "Variable"),
+    names_sep = "_"
+  ) %>%
+  separate(Variable, into = c("Diet", "PrePostExp"), sep = "PrePostExp") %>%
+  mutate(Diet = c(DIET)) %>%
+  mutate(direct = ifelse(lfc > 0, "Positive LFC", "Negative LFC"))
+}) %>% bind_rows()
+
+df_plot <- df_plot %>%
+  mutate(PrePostExp = fct_relevel(PrePostExp, "Pre-exposure", "Unexposed", "Exposed"))
+
+
+## pivot longer
+
+
+fig_plot = df_plot %>%
+    ggplot(aes(x = PrePostExp, y = lfc, fill = PrePostExp)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             # position = position_dodge(width = 0.4)
+             position = "dodge",
+             # fill = c("grey", "grey",col.Diet[1], 
+             #          col.Diet[2],"grey", "grey", 
+             #          "grey",col.Diet[3],  col.Diet[3])
+             ) +
+    geom_errorbar(aes(ymin = lfc - se, ymax = lfc + se), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    # geom_text(aes(x = PrePostExp, y = lfc, label = ifelse(isTRUE(diff), "*", "ns"))) + 
+    facet_grid(. ~ Diet) +
+  geom_text(aes(x = PrePostExp, y = lfc/3, label = ifelse(diff, "x", "")), size = 12) + 
+    labs(x = "Treatment", y = "Log fold change", 
+         title = "Log fold changes in Mycobacterium abundance",
+         caption = paste0("Exposed fish as reference group for each diet")
+         ) + 
+    scale_fill_manual(name = NULL, values = col.Exp[c(1,3,2)]) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 33, hjust = 1),
+          legend.position = "none")
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_plot %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    hline(j = NULL, part = "body") %>%
+    # hline(i = ~ , j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Summary table of Mycobacterium abundance, ref = Exposed")) %>%
+    autofit() %>%
+    save_as_image(path = paste0(
+                            file.path(path.figures, 
+                                      tmp.path, 
+                                      "ANCOMBC2-Exp_All_Myco."
+                                      ),
+                            ext),  # pdf or png
+                  )
+})
+# save_as_image(path = file.path(path.figures, tmp.path, "ANCOMBC2-Diet_4moCtrl.png"))
+
+
+df_plot %>%
+  select(Diet, Taxon, value) %>%
+  arrange(Diet, Taxon) %>%
+  select(Taxon)
+
+```
+
+
+
+
+
+#### Pairwise
+
+
+```{r, fig.width=8.5, fig.height=11}
+
+data.diffAb = diffAb.all_PrePostExp
+
+# Dataframes 
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("Taxon") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(Taxon, 
+              `Gemma vs. Watts` = round(lfc_Watts, 2), 
+              `Gemma vs. ZIRC` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma vs. Watts`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(Taxon)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Gemma vs. Watts",
+                                      "Gemma vs. ZIRC",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons",
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+
+# Sensitivity Pairs
+
+sens_pair = tab_sens %>%
+    rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    transmute(sens_pair = `Gemma - Watts`) %>%
+    rownames_to_column("Taxon") %>%
+    left_join(df_pair %>%
+                  transmute(Taxon, 
+                            diff_pair = diff_DietWatts), 
+              by = "Taxon") %>%
+    mutate(group = "Gemma vs. Watts") %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Gemma - ZIRC`) %>%
+            rownames_to_column("Taxon") %>%
+            left_join(df_pair %>%
+                          transmute(Taxon, 
+                                    diff_pair = diff_DietZIRC), 
+                      by = "Taxon") %>%
+            mutate(group = "Gemma vs. ZIRC")
+    ) %>%
+    bind_rows(
+        tab_sens %>%
+            transmute(sens_pair = `Watts - ZIRC`) %>%
+            rownames_to_column("Taxon") %>%
+            left_join(df_pair %>%
+                          transmute(Taxon, 
+                                    diff_pair = diff_DietZIRC_DietWatts), 
+                      by = "Taxon") %>%
+            mutate(group = "Watts vs. ZIRC")
+    )
+sens_pair$diff_pair = recode(sens_pair$diff_pair * 1, 
+                             `1` = "Significant",
+                             `0` = "Nonsignificant")
+sens_pair$group = factor(sens_pair$group, 
+                         levels = c("Gemma vs. Watts",
+                                    "Gemma vs. ZIRC",
+                                    "Watts vs. ZIRC"))
+
+fig_sens_pair = sens_pair %>%
+    ggplot(aes(x = Taxon, y = sens_pair, color = diff_pair)) +
+    geom_point() +
+    scale_color_brewer(palette = "Dark2", name = NULL) +
+    facet_grid(rows = vars(group), scales = "free") +
+    labs(x = NULL, y = "Sensitivity Score",
+       caption = "(4mo, controls)") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+fig_sens_pair
+
+```
+
+
+
+
+
+#### Primary
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+##### Gemma
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_GemmaExp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Exposure")) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+
+
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in Unexposed Gemma diet",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))) + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[1], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    arrange(-lfc_ExposureUnexposed) %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-ExpGemma_7mo."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+  arrange(-lfc_ExposureUnexposed) %>%
+  select(Taxon)
+
+
+```
+
+##### Watts
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_WattsExp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Exposure")) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in Unexposed Watts diet",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))) + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[2], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    arrange(-lfc_ExposureUnexposed) %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-ExpWatts_7mo."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+  arrange(-lfc_ExposureUnexposed) %>%
+  select(Taxon)
+
+
+```
+
+
+##### ZIRC
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_ZIRCExp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Exposure")) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in Unexposed ZIRC diet",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))) + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[3], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    arrange(-lfc_ExposureUnexposed) %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-ExpZIRC_7mo."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+  arrange(-lfc_ExposureUnexposed) %>%
+  select(Taxon)
+
+
+```
+
+
+##### PrePostExp
+
+
+```{r}
+
+data.diffAb <- diffAb.T1_Exp
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "ExposureExposed", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, everything()) 
+df_fig_plot = df_plot %>%
+    filter(diff_ExposureUnexposed == 1 ) %>% 
+    arrange(desc(lfc_ExposureUnexposed)) %>%
+    mutate(direct = ifelse(lfc_ExposureUnexposed > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_ExposureUnexposed, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_ExposureUnexposed - se_ExposureUnexposed, ymax = lfc_ExposureUnexposed + se_ExposureUnexposed), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in unexposed across all diets") + 
+    scale_fill_manual(name = NULL, values = c(col.Exp[3], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    arrange(-lfc_ExposureUnexposed) %>%
+    select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-ExpAllDiets_7mo."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_ExposureUnexposed, diff_ExposureUnexposed, direct) %>%
+  arrange(-lfc_ExposureUnexposed) %>%
+  select(Taxon)
+
+
+```

@@ -1,0 +1,835 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing control fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.conT0T1
+data.alpha <- dt.alphaPlus.conT0T1.melt
+ps.obj <- ps.conT0T1
+dist <- distList.conT0T1
+# data.diffAb <- diffAb.conT0T1_DietTime
+# data.diffAb <- diffAb.conT0T1_Time
+
+levels(data.alpha$Timepoint) <- factor(levels(data.alpha$Timepoint), levels = c("4mpf", "7mpf"))
+data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "4mpf")
+
+levels(data$Timepoint) <- factor(levels(data$Timepoint), levels = c("4mpf", "7mpf"))
+data$Timepoint <- relevel(factor(data$Timepoint), ref = "4mpf")
+
+```
+
+### Differential Abundance
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Dev_4mo7moCtrl/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8.5,
+          height = 11,
+          units = "in"
+          )
+
+```
+
+
+#### Global
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_DietTime
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet, Timepoint, Diet.Time),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet", "Timepoint", "Diet.Time"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet.Time, Diet, Timepoint, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+p_heat_plotDiet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ Timepoint")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Timepoint, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotTime = df_plot %>%
+  ggplot(aes(x = Timepoint, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ Diet")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Diet, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Timepoint, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 & 7 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+
+p_heat_plotDiet
+p_heat_plotTime
+
+
+
+lapply(c("pdf", "png"), function(ext){
+  data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+    arrange(Taxon) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    hline(j = NULL, part = "body") %>%
+    # hline(i = ~ , j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Summary table of abundant taxa (4-7mpf, controls), sig taxa = ", length(sig_taxa))) %>%
+    autofit() %>%
+    save_as_image(path = paste0(
+                            file.path(path.figures, 
+                                      tmp.path, 
+                                      "ANCOMBC2_Weight-Diet_4-7moCtrl."
+                                      ),
+                            ext),  # pdf or png
+                  )
+})
+
+
+```
+
+
+
+#### Pairwise
+
+```{r, fig.width=8.5, fig.height=11}
+
+# Dataframes 
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("Taxon") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(Taxon, 
+              `Gemma vs. Watts` = round(lfc_Watts, 2), 
+              `Gemma vs. ZIRC` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma vs. Watts`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(Taxon)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Gemma vs. Watts",
+                                      "Gemma vs. ZIRC",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons",
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+
+# Sensitivity Pairs
+# 
+# sens_pair = tab_sens %>%
+#     rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+#       # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+#     transmute(sens_pair = `Gemma - Watts`) %>%
+#     rownames_to_column("Taxon") %>%
+#     left_join(df_pair %>%
+#                   transmute(Taxon, 
+#                             diff_pair = diff_DietWatts), 
+#               by = "Taxon") %>%
+#     mutate(group = "Gemma vs. Watts") %>%
+#     bind_rows(
+#         tab_sens %>%
+#             transmute(sens_pair = `Gemma - ZIRC`) %>%
+#             rownames_to_column("Taxon") %>%
+#             left_join(df_pair %>%
+#                           transmute(Taxon, 
+#                                     diff_pair = diff_DietZIRC), 
+#                       by = "Taxon") %>%
+#             mutate(group = "Gemma vs. ZIRC")
+#     ) %>%
+#     bind_rows(
+#         tab_sens %>%
+#             transmute(sens_pair = `Watts - ZIRC`) %>%
+#             rownames_to_column("Taxon") %>%
+#             left_join(df_pair %>%
+#                           transmute(Taxon, 
+#                                     diff_pair = diff_DietZIRC_DietWatts), 
+#                       by = "Taxon") %>%
+#             mutate(group = "Watts vs. ZIRC")
+#     )
+# sens_pair$diff_pair = recode(sens_pair$diff_pair * 1, 
+#                              `1` = "Significant",
+#                              `0` = "Nonsignificant")
+# sens_pair$group = factor(sens_pair$group, 
+#                          levels = c("Gemma vs. Watts",
+#                                     "Gemma vs. ZIRC",
+#                                     "Watts vs. ZIRC"))
+# 
+# fig_sens_pair = sens_pair %>%
+#     ggplot(aes(x = Taxon, y = sens_pair, color = diff_pair)) +
+#     geom_point() +
+#     scale_color_brewer(palette = "Dark2", name = NULL) +
+#     facet_grid(rows = vars(group), scales = "free") +
+#     labs(x = NULL, y = "Sensitivity Score",
+#        caption = "(4mo, controls)") +
+#     theme_bw() +
+#     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+# fig_sens_pair
+
+```
+
+#### Primary
+
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Dev_4mo7moCtrl/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+##### Gemma
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_Gemma
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Timepoint")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months in Gemma diet",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))) + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[1], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    arrange(-lfc_Timepoint7mpf) %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-DietGemma_4-7moCtrl."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(Taxon)
+```
+
+##### Watts
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_Watts
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Timepoint")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months in Watts diet",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))
+         ) + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[2], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    arrange(-lfc_Timepoint7mpf) %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-DietWatts_4-7moCtrl."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(Taxon)
+
+```
+
+##### ZIRC
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_ZIRC
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Timepoint")) 
+
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months in ZIRC diet",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))) + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[3], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    arrange(-lfc_Timepoint7mpf) %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-DietZIRC_4-7moCtrl."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(Taxon)
+
+```
+
+##### Time
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_Time
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "Timepoint4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Timepoint")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Timepoint7mpf == 1) %>% 
+    arrange(desc(lfc_Timepoint7mpf)) %>%
+    mutate(direct = ifelse(lfc_Timepoint7mpf > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_Timepoint7mpf, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Timepoint7mpf - se_Timepoint7mpf, ymax = lfc_Timepoint7mpf + se_Timepoint7mpf), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes between 4 and 7 months across all diets",
+         caption = paste0("# sig taxa = ", nrow(df_fig_plot))) + 
+    scale_fill_manual(name = NULL, values = c(col.Time[2], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_fig_plot %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    arrange(-lfc_Timepoint7mpf) %>%
+    select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 6) %>%
+    # merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Log fold change in abundance. # Sig taxa = ", nrow(df_fig_plot))) %>%
+    autofit() %>%
+      save_as_image(path = paste0(
+                              file.path(path.figures, 
+                                        tmp.path, 
+                                        "ANCOMBC2-Time_4-7moCtrl."
+                                        ),
+                              ext),  # pdf or png
+                    )
+})
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Timepoint7mpf, diff_Timepoint7mpf, direct) %>%
+  arrange(-lfc_Timepoint7mpf) %>%
+  select(Taxon)
+
+
+```
+
+
+##### Diet:Time
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_DietTime
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+
+res_prim <- data.diffAb$res
+
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "Diet.TimeGemma.4mpf", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Diet.Time")) 
+
+
+
+df_fig_plot = df_plot %>%
+    filter((diff_Diet.TimeGemma.7mpf == 1 & 
+              diff_Diet.TimeGemma.4mpf == 0 & 
+              diff_Diet.TimeWatts.7mpf == 0 & 
+              diff_Diet.TimeWatts.4mpf == 0 & 
+              diff_Diet.TimeZIRC.7mpf == 0 & 
+              diff_Diet.TimeZIRC.4mpf == 0) | 
+           (diff_Diet.TimeWatts.7mpf == 1 & 
+              diff_Diet.TimeGemma.4mpf == 0 & 
+              diff_Diet.TimeGemma.7mpf == 0 & 
+              diff_Diet.TimeWatts.4mpf == 0 & 
+              # diff_Diet.TimeWatts.7mpf == 0 & 
+              diff_Diet.TimeZIRC.4mpf == 0 & 
+              diff_Diet.TimeZIRC.7mpf == 0) | 
+           (diff_Diet.TimeZIRC.7mpf == 1 & 
+              diff_Diet.TimeGemma.4mpf == 0 & 
+              diff_Diet.TimeGemma.7mpf == 0 & 
+              diff_Diet.TimeWatts.4mpf == 0 & 
+              diff_Diet.TimeWatts.7mpf == 0 & 
+              diff_Diet.TimeZIRC.4mpf == 0 #& 
+              # diff_Diet.TimeZIRC.7mpf == 0
+              ) 
+           ) %>%
+    mutate(lfc_Diet.TimeGemma.7mpf = ifelse(diff_Diet.TimeGemma.7mpf == 1, 
+                                   lfc_Diet.TimeGemma.7mpf, 0),
+           lfc_Diet.TimeWatts.7mpf = ifelse(diff_Diet.TimeWatts.7mpf == 1, 
+                             lfc_Diet.TimeWatts.7mpf, 0),
+           lfc_Diet.TimeZIRC.7mpf = ifelse(diff_Diet.TimeZIRC.7mpf == 1, 
+                             lfc_Diet.TimeZIRC.7mpf, 0)) %>%
+    transmute(Taxon, 
+              # `Gemma (4 vs 7 mpf)` = round(lfc_Diet.TimeGemma.7mpf, 2),
+              # `Watts (4 vs 7 mpf)` = round(lfc_Diet.TimeWatts.7mpf, 2),
+              # `ZIRC (4 vs 7 mpf)` = round(lfc_Diet.TimeZIRC.7mpf, 2)
+              `Gemma (7 mpf)` = round(lfc_Diet.TimeGemma.7mpf, 2),
+              `Watts (7 mpf)` = round(lfc_Diet.TimeWatts.7mpf, 2),
+              `ZIRC (7 mpf)` = round(lfc_Diet.TimeZIRC.7mpf, 2)
+              ) %>%
+    pivot_longer(cols = `Gemma (7 mpf)`:`Watts (7 mpf)`:`ZIRC (7 mpf)`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(Taxon)
+  
+lo = floor(min(df_fig_plot$value))
+up = ceiling(max(df_fig_plot$value))
+mid = (lo + up)/2
+fig_plot = df_fig_plot %>%
+  ggplot(aes(x = group, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = "Log fold changes of uniquely abundant taxa across diets at 7mpf") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+fig_plot
+
+```
+
+
+##### Body Condition Score
+
+No significantly differentially abundant taxa across all diets and body condition score at genus level
+
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_DietBCS
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Body.Condition.Score")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Body.Condition.Score == 1) %>% 
+    arrange(desc(lfc_Body.Condition.Score)) %>%
+    mutate(direct = ifelse(lfc_Body.Condition.Score > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_Body.Condition.Score, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Body.Condition.Score - se_Body.Condition.Score, ymax = lfc_Body.Condition.Score + se_Body.Condition.Score), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "ANCOM-BC2: Log fold changes as one unit increases of Body Condition Score across all diets") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[1], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Body.Condition.Score, diff_Body.Condition.Score, direct) %>%
+  arrange(-lfc_Body.Condition.Score) %>%
+  select(Taxon, lfc_Body.Condition.Score, diff_Body.Condition.Score, direct) %>%
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Log fold changes as one unit increases of Body Condition Score across all diets")) %>%
+  autofit()
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Body.Condition.Score, diff_Body.Condition.Score, direct) %>%
+  arrange(-lfc_Body.Condition.Score) %>%
+  select(Taxon)
+
+```
+
+
+##### BCS (ZIRC)
+
+No significantly abundant taxa within ZIRC diet that associate with body condition score at genus level
+
+```{r}
+
+data.diffAb <- diffAb.conT0T1_ZIRCBCS_Phylum
+
+res_prim <- data.diffAb$res
+
+df_plot = res_prim %>%
+    rownames_to_column("Taxon") %>%
+    # rename_with(~gsub("(Intercept)", "DietGemma", .x, fixed = T)) %>%
+      # Source: https://community.rstudio.com/t/replace-parts-of-a-column-name/116646/2
+    dplyr::select(Taxon, contains("Body.Condition.Score")) 
+df_fig_plot = df_plot %>%
+    filter(diff_Body.Condition.Score == 1) %>% 
+    arrange(desc(lfc_Body.Condition.Score)) %>%
+    mutate(direct = ifelse(lfc_Body.Condition.Score > 0, "Positive LFC", "Negative LFC"))
+df_fig_plot$Taxon = factor(df_fig_plot$Taxon, levels = df_fig_plot$Taxon)
+df_fig_plot$direct = factor(df_fig_plot$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+  
+fig_plot = df_fig_plot %>%
+    ggplot(aes(x = Taxon, y = lfc_Body.Condition.Score, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_Body.Condition.Score - se_Body.Condition.Score, ymax = lfc_Body.Condition.Score + se_Body.Condition.Score), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "ANCOM-BC2: Log fold changes as one unit increases of Body Condition Score across all diets") + 
+    scale_fill_manual(name = NULL, values = c(col.Diet[1], "grey")) +
+    scale_color_discrete(name = NULL) +
+    theme_bw() + 
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1))
+
+fig_plot
+
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Body.Condition.Score, diff_Body.Condition.Score, direct) %>%
+  arrange(-lfc_Body.Condition.Score) %>%
+  select(Taxon, lfc_Body.Condition.Score, diff_Body.Condition.Score, direct) %>%
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Log fold changes as one unit increases of Body Condition Score across all diets")) %>%
+  autofit()
+
+
+df_fig_plot %>%
+  select(Taxon, lfc_Body.Condition.Score, diff_Body.Condition.Score, direct) %>%
+  arrange(-lfc_Body.Condition.Score) %>%
+  select(Taxon)
+
+```
+

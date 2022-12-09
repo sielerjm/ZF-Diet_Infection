@@ -1,0 +1,829 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing control fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.conT0T1
+data.alpha <- dt.alphaPlus.conT0T1.melt
+ps.obj <- ps.conT0T1
+dist <- distList.conT0T1
+# data.diffAb <- diffAb.conT0T1_DietTime
+# data.diffAb <- diffAb.conT0T1_Time
+
+levels(data.alpha$Timepoint) <- factor(levels(data.alpha$Timepoint), levels = c("4mpf", "7mpf"))
+data.alpha$Timepoint <- relevel(factor(data.alpha$Timepoint), ref = "4mpf")
+
+levels(data$Timepoint) <- factor(levels(data$Timepoint), levels = c("4mpf", "7mpf"))
+data$Timepoint <- relevel(factor(data$Timepoint), ref = "4mpf")
+
+```
+
+
+
+### Beta Diversity
+
+
+```{r}
+tmp.path <- "gg_Record/Dev_4mo7moCtrl/Beta"
+# Plot settings
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+#### Diet
+
+```{r Dev-Beta-Diets}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+# lapply(methods.beta, function(beta){
+# 
+# p.val <- anova$p.value[anova$metric == beta][1]
+# p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+# cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+# cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+# 
+# 
+#   dt.ord.full.beta[[beta]]$sample.coords %>%
+#     ggplot(aes(x = .[[2]], y = .[[3]])) +
+#       stat_ellipse(aes(color = Diet )) +
+#       geom_point(aes(color = Diet),
+#                  size = 2.5,
+#                  alpha = 1) +
+#       annotate("text", 
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(values = col.Diet) +
+#       scale_color_manual(values = col.Diet)  + 
+#       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+#            y = dt.ord.full.beta[[beta]]$axes.labs[2],
+#            caption = beta) + 
+#       theme(legend.position = "bottom")
+# })
+
+
+
+# Fig.2.c <- lapply(methods.beta, function(beta){
+# 
+# p.val <- anova$p.value[anova$metric == beta][1]
+# p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+# cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+# cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+# 
+# 
+#   dt.ord.full.beta[[beta]]$sample.coords %>%
+#     ggplot(aes(x = .[[2]], y = .[[3]])) +
+#       stat_ellipse(aes(color = Timepoint )) +
+#       geom_point(aes(color = Timepoint),
+#                  size = 2.5,
+#                  alpha = 1) +
+#       annotate("text", 
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(values = col.Time) +
+#       scale_color_manual(values = col.Time)  + 
+#       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+#            y = dt.ord.full.beta[[beta]]$axes.labs[2],
+#            caption = beta) + 
+#       theme(legend.position = "bottom")
+# })
+
+lapply(methods.beta, function(beta){
+
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet,
+                     shape = Timepoint),
+                 stroke = 1,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Time", values = col.Diet) +
+      scale_color_manual(name = "Time", values = col.Diet)  + 
+      scale_shape_manual(name = "Time", values = c(19, 1)) +
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
+# Fig.2.c.3 <- lapply(methods.beta, function(beta){
+# 
+# p.val <- anova$p.value[anova$metric == beta][1]
+# p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+# cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+# cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+# 
+# 
+#   dt.ord.full.beta[[beta]]$sample.coords %>%
+#     ggplot(aes(x = .[[2]], y = .[[3]])) +
+#       stat_ellipse(aes(color = Diet )) +
+#       geom_point(aes(color = Diet, fill = Timepoint),
+#                  shape = 21,
+#                  size = 2.5,
+#                  stroke = 1.25,
+#                  alpha = 1) +
+#       annotate("text", 
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(name = "Time", values = col.Time) +
+#       scale_color_manual(name = "Diet",values = col.Diet)  + 
+#       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+#            y = dt.ord.full.beta[[beta]]$axes.labs[2],
+#            caption = beta) + 
+#       theme(legend.position = "bottom")
+# })
+
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_4-7moCtrl.png"))
+
+
+```
+
+
+
+#### Time
+
+```{r Dev-Beta-Time}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Timepoint"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+# lapply(methods.beta, function(beta){
+# 
+#   p.val <- anova$p.value[anova$metric == beta][1]
+#   p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+#   cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+#   cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+# 
+#   dt.ord.full.beta[[beta]]$sample.coords %>%
+#     ggplot(aes(x = .[[2]], y = .[[3]])) +
+#       stat_ellipse(aes(color = Diet, linetype = Timepoint )) +
+#       geom_point(aes(color = Diet,
+#                      shape = Timepoint),
+#                  size = 2.5,
+#                  alpha = 1) +
+#       annotate("text", 
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(name = "Time", values = col.Time) +
+#       scale_color_manual(name = "Diet", values = col.Diet)  + 
+#       scale_shape_manual(name = "Time", values = c(19, 1)) +
+#       scale_linetype_manual(name = "Time", values = c("solid", "dashed")) +
+#       labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+#            y = dt.ord.full.beta[[beta]]$axes.labs[2],
+#            caption = beta) + 
+#       theme(legend.position = "bottom")
+# })
+
+
+
+lapply(methods.beta, function(beta){
+
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet,
+                     shape = Timepoint),
+                 stroke = 1,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Time", values = col.Diet) +
+      scale_color_manual(name = "Time", values = col.Diet)  + 
+      scale_shape_manual(name = "Time", values = c(19, 1)) +
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
+
+
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Time")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Time_4-7moCtrl.png"))
+
+```
+
+
+#### Diets:Time
+
+
+```{r}
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet", "Timepoint"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+beta.metric <- 'Bray-Curtis'
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+
+lapply(methods.beta, function(beta){
+
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet )) +
+      geom_point(aes(color = Diet,
+                     shape = Timepoint),
+                 stroke = 1,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Time", values = col.Diet) +
+      scale_color_manual(name = "Time", values = col.Diet)  + 
+      scale_shape_manual(name = "Time", values = c(19, 1)) +
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+})
+
+
+
+# 
+# Fig.2.x.1 <- lapply(methods.beta, function(beta){
+#   
+#   p.val <- anova$p.value[anova$metric == beta][1]
+#   p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+#   cap.min <- min(dt.ord.full.beta[[beta.metric]]$sample.coords[[3]])
+#   cap.max <- max(dt.ord.full.beta[[beta.metric]]$sample.coords[[2]])
+# 
+# 
+#   dt.ord.full.beta[[beta.metric]]$sample.coords %>%
+#     ggplot(aes(x = CAP1, y = CAP2)) +
+#       stat_ellipse(aes(color = Diet, linetype = Timepoint )) +
+#       geom_point(aes(color = Diet,
+#                      shape = Timepoint),
+#                  # shape = 21,
+#                  size = 2.5,
+#                  alpha = 1) +
+#       annotate("text", 
+#                # label = paste0(beta.metric, "; ", p.val.label),
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(name = "Diet", values = pal.Dark2) +
+#       scale_color_manual(name = "Diet", values = pal.Dark2)  + 
+#       scale_shape_manual(name = "Time", values = c(19, 1)) +
+#       labs(x = dt.ord.full.beta[[beta.metric]]$axes.labs[1], 
+#            y = dt.ord.full.beta[[beta.metric]]$axes.labs[2],
+#            caption = beta) + 
+#       theme(legend.position = "bottom")
+# 
+# })
+#   
+# Fig.2.x.1
+# 
+# Fig.2.x.2 <- lapply(methods.beta, function(beta){
+#   
+#   p.val <- anova$p.value[anova$metric == beta.metric][1]
+#   p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+#   cap.min <- min(dt.ord.full.beta[[beta.metric]]$sample.coords[[3]])
+#   cap.max <- max(dt.ord.full.beta[[beta.metric]]$sample.coords[[2]])
+# 
+# 
+#   dt.ord.full.beta[[beta.metric]]$sample.coords %>%
+#     ggplot(aes(x = .[[2]], y = .[[3]])) +
+#       stat_ellipse(aes(color = Timepoint, linetype = Diet )) +
+#       geom_point(aes(color = Timepoint,
+#                      fill = Timepoint,
+#                      shape = Diet
+#                      ),
+#                  # shape = 21,
+#                  size = 2.5,
+#                  alpha = 1) +
+#       annotate("text", 
+#                # label = paste0(beta.metric, "; ", p.val.label),
+#                label = p.val.label,
+#                x = cap.max, y = cap.min, 
+#                size = 5, 
+#                color = "black",
+#                hjust = .95
+#       ) +
+#       scale_fill_manual(name = "Diet", values = col.Time) +
+#       scale_color_manual(name = "Diet", values = col.Time)  + 
+#       # scale_shape_manual(name = "Time", values = c(19, 1)) +
+#       labs(x = dt.ord.full.beta[[beta.metric]]$axes.labs[1], 
+#            y = dt.ord.full.beta[[beta.metric]]$axes.labs[2],
+#            caption = beta) + 
+#       theme(legend.position = "bottom")
+# 
+# })
+#   
+# Fig.2.x.2
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet*Time")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-DietTime_4-7moCtrl.png"))
+
+```
+
+
+
+
+
+#### (SM) Beta-Dispersion
+
+```{r}
+ord.beta <- c("bray", "canberra", "sor")
+
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- phyloseq::ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- phyloseq::plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+```
+
+
+##### Diet
+
+```{r, fig.width=5, fig.height=5}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Diet)  %>% boxplot(xlab = "Diet")
+  
+}) 
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-Diet_4-7moCtrl.png"))
+                )
+   })
+  })
+})
+```
+
+
+##### Time
+
+```{r, fig.width=5, fig.height=5}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = data$Timepoint)  %>% boxplot(xlab = "Time")
+  
+}) 
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-Time_4-7moCtrl.png"))
+                )
+   })
+  })
+})
+```
+
+##### Diet:Time (all)
+
+```{r}
+
+# Add interaction
+tmp.data <- data %>%
+  mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age)
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Diet.Time)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Diet.Time)  %>% boxplot(col = col.Diet[c(1,1,2,2,3,3)],
+                                                        xlab = "Time")
+  
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <- lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    filter(`p-value` < .1) %>%
+    arrange(`p-value`) %>%
+    flextable() %>%
+  set_caption(paste0("filtered p-value < 0.1"))
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl.png"))
+                )
+   })
+  })
+})
+
+```
+
+
+##### Diet:Time (per diet)
+
+###### Gemma
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Gemma")
+
+dist <- distList.conT0T1.Gemma
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Time)  %>% boxplot(col = col.Diet[1],
+                                                        xlab = "Time (Gemma)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Gemma.png"))
+                )
+   })
+  })
+})
+
+
+```
+
+
+###### Watts
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Watts")
+
+dist <- distList.conT0T1.Watts
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Time)  %>% boxplot(col = col.Diet[2],
+                                                        xlab = "Time (Watts)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Watts.png"))
+                )
+   })
+  })
+})
+
+
+```
+
+
+
+###### ZIRC
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "ZIRC")
+
+dist <- distList.conT0T1.ZIRC
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Time)  %>% boxplot(col = col.Diet[3],
+                                                        xlab = "Time (ZIRC)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_ZIRC.png"))
+                )
+   })
+  })
+})
+
+
+```
+

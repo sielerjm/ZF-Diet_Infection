@@ -1,0 +1,696 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing pathogen exposed fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.all
+data.alpha <- dt.alphaPlus.all.melt
+data.beta <- df.T1
+data.beta2 <- df.all # Includes pre-exposure fish
+ps.obj <- ps.all
+dist <- distList.T1
+dist2 <- distList.all
+
+
+
+# Relevel
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data.beta2$PrePostExp <- relevel(factor(data.beta2$PrePostExp), ref = "Pre-exposure")
+
+levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Unexposed", "Exposed"))
+sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+# 
+# levels(data.da$PrePostExp) <- factor(levels(data.da$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
+
+
+
+```
+
+
+### Beta Diversity
+
+
+```{r}
+
+tmp.path <- "gg_Record/Exposure/Beta"
+# Plot settings
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Beta"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+#### Exposure
+
+```{r Path-Beta-Exp}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("PrePostExp"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+
+lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = PrePostExp )) +
+      geom_point(aes(color = PrePostExp,
+                     shape = Diet),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+      annotate("text", 
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+      scale_color_manual(values = pal.Set1[c(4,1,2)])  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      # scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(title = beta,
+           x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+})[1:2]
+
+  
+
+
+###
+  # dt.ord.full.beta[[beta]]$sample.coords %>%
+  #   ggplot(aes(x = CAP1, y = MDS1)) +
+  #     stat_ellipse(aes(color = Diet, linetype = PrePostExp )) +
+  #     # stat_ellipse(aes(linetype = Diet )) +
+  #     geom_point(aes(color = PrePostExp,
+  #                    shape = Diet),
+  #                size = 2.5,
+  #                alpha = 1 ) +
+  #     annotate("text", 
+  #              label = p.val.label,
+  #              x = cap.max, y = cap.min, 
+  #              size = 5, 
+  #              color = "black",
+  #              hjust = .95
+  #     ) +
+  #     scale_fill_manual(name = "Treatment", values = pal.Set1[c(1,2)]) +
+  #     scale_color_manual(name = "Treatment", values = pal.Set1[c(1,2)])  + 
+  #     scale_linetype_manual(name = "Diet", values = c("dashed", "solid", "dotted")) +
+  #     labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+  #          y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+  #     theme(legend.position = "bottom") 
+###
+  
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Exposure")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-PrePostExp_All.png"))
+
+```
+
+#### Diets
+
+<!-- ```{r} -->
+
+
+<!-- # Full dbRDA models -->
+<!-- mod <- full_dbrda_model(vars = c("Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)" -->
+<!--                           distance = dist, -->
+<!--                           methods = methods.beta, -->
+<!--                           names = set_names_beta, -->
+<!--                           physeq = ps.obj, -->
+<!--                           data = data.beta, -->
+<!--                           terms = 1,  # if you want interaction terms enter 2, otherwise 1 -->
+<!--                           num.cores = num.cores -->
+<!--                         ) -->
+
+<!-- anova <- beta_anova(beta.model = mod, -->
+<!--                     methods = methods.beta, -->
+<!--                     names = set_names_beta, -->
+<!--                     num.cores = num.cores) -->
+
+
+<!-- # Plot prep -->
+<!-- dt.ord.full.beta <- ord_dt_list(mod, ps.obj) -->
+<!-- beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta) -->
+<!-- beta.axis.full <- axis_labels(dt.ord.full.beta) -->
+
+<!-- min(dt.ord.full.beta[[beta]]$sample.coords[[3]]) -->
+<!-- max(dt.ord.full.beta[[beta]]$sample.coords[[2]]) -->
+
+<!-- Fig.3.d <- lapply(methods.beta, function(beta){ -->
+
+<!--   p.val <- anova$p.value[anova$metric == beta][1] -->
+<!--   p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val) -->
+<!--   cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]]) -->
+<!--   cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]]) -->
+
+<!--   dt.ord.full.beta[[beta]]$sample.coords %>% -->
+<!--     ggplot(aes(x = CAP1, y = CAP2)) + -->
+<!--       stat_ellipse(aes(color = Diet )) + -->
+<!--       geom_point(aes(color = Diet, -->
+<!--                      shape = PrePostExp), -->
+<!--                  size = 2.5, -->
+<!--                  stroke = 1, -->
+<!--                  alpha = 1 ) + -->
+<!--       annotate("text",  -->
+<!--                label = p.val.label, -->
+<!--                x = cap.max, y = cap.min,  -->
+<!--                size = 5,  -->
+<!--                color = "black", -->
+<!--                hjust = .95 -->
+<!--       ) + -->
+<!--       scale_fill_manual(values = pal.Dark2) + -->
+<!--       scale_color_manual(values = pal.Dark2)  +  -->
+<!--       scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) + -->
+<!--       scale_shape_manual(name = "Treatment", values = c(19, 1)) +  -->
+<!--       labs(title = beta, -->
+<!--            x = dt.ord.full.beta[[beta]]$axes.labs[1],  -->
+<!--            y = dt.ord.full.beta[[beta]]$axes.labs[2]) +  -->
+<!--       theme(legend.position = "bottom") -->
+<!-- })[1:2] -->
+
+<!-- Fig.3.d -->
+
+<!-- stats_table(anova) %>% -->
+<!--   set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diets")) %>% -->
+<!--   save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_All.png")) -->
+
+<!-- ``` -->
+
+#### (SM) Diets:Exposure 
+
+```{r}
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Diet", "PrePostExp"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+Supp.Fig.3.d.1 <- lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Diet, linetype = PrePostExp )) +
+      geom_point(aes(color = Diet,
+                     shape = PrePostExp),
+                 # shape = 21,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               # label = paste0(beta.metric, "; ", p.val.label),
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_fill_manual(name = "Exposure", values = col.Diet) +
+      scale_color_manual(name = "Diet", values = col.Diet)  + 
+      scale_shape_manual(name = "Exposure", values = c(19, 1)) +
+      scale_linetype_manual(name = "Exposure", values = c("solid", "dotted")) +
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom")
+
+})
+  
+Supp.Fig.3.d.1 
+
+
+Supp.Fig.3.d.2 <- lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = PrePostExp, linetype = Diet )) +
+      geom_point(aes(color = PrePostExp,
+                     shape = Diet),
+                 # shape = 21,
+                 size = 2.5,
+                 alpha = 1) +
+      annotate("text", 
+               # label = paste0(beta.metric, "; ", p.val.label),
+               label = p.val.label,
+               x = cap.max, y = cap.min, 
+               size = 5, 
+               color = "black",
+               hjust = .95
+      ) +
+      scale_linetype_manual(name = "Diet", values = c("solid", "dashed", "dotted")) +
+      scale_fill_manual(name = "Diet", values = col.Diet) +
+      scale_color_manual(name = "Exposure", values = col.Exp[c(2,3)])  + 
+      labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2],
+           caption = beta) + 
+      theme(legend.position = "bottom") 
+
+})
+
+# Supp.Fig.3.d.1 
+Supp.Fig.3.d.2 
+
+##
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diets:Exposure")) %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-DietPrePostExp_All.png"))
+
+```
+
+
+#### (SM) Beta-Dispersion
+
+
+
+
+##### Exposure
+
+```{r}
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp <- lapply(dist2[1:2], function(beta) {
+  betadisper(beta, group = data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist2[1:2], function(beta) {
+  betadisper(beta, group = data$PrePostExp)  %>% boxplot(xlab = "Exposure",
+                                                         col = pal.Set1[c(1,4,2)])
+  
+}) 
+
+# Anova
+lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+})
+
+# Permutation table
+lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+})
+```
+
+##### Diet:Exposure (all)
+
+```{r fig.width=20}
+
+# Add interaction
+data <- data %>%
+  mutate(Diet.Exp = paste0(Diet,".", PrePostExp), .after = Age)
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist2, function(beta) {
+  betadisper(beta, group = data$Diet.Exp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist2, function(beta) {
+  betadisper(beta, group = data$Diet.Exp)  %>% boxplot(col = pal.Set1[c(1,4,2)])
+  
+}) 
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    filter(`p-value` < 0.1) %>%
+    arrange(`p-value`) %>%
+    flextable() %>%
+    set_caption(paste0("Beta-Dispersion Pairwise Comparisons: p-values < 0.1"))
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietPrePostExp_All.png"))
+                )
+   })
+  })
+})
+
+```
+
+
+```{r}
+# beta.disp.stats[["pairwise"]][["Canberra"]] %>%
+  # print(beta)
+  beta.disp$bray$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    filter(`p-value` < 0.1) %>%
+    arrange(`p-value`) %>%
+    flextable() %>%
+    set_caption(paste0("Beta-Dispersion Pairwise Comparisons: p-values < 0.1"))
+```
+
+
+##### Diet:Time (per diet)
+
+###### Gemma
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Gemma")
+
+dist <- distList.all.Gemma
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% boxplot(col = pal.Set1[c(4,1,2)],
+                                                        xlab = "Exposure (Gemma)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Gemma.png"))
+                )
+   })
+  })
+})
+
+
+```
+
+
+###### Watts
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Watts")
+
+dist <- distList.all.Watts
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% boxplot(col = pal.Set1[c(4,1,2)],
+                                                        xlab = "Exposure (Watts)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Watts.png"))
+                )
+   })
+  })
+})
+```
+
+
+
+###### ZIRC
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "ZIRC")
+
+dist <- distList.all.ZIRC
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% boxplot(col = pal.Set1[c(4,1,2)],
+                                                        xlab = "Exposure (ZIRC)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_ZIRC.png"))
+                )
+   })
+  })
+})
+```
+
+
+##### Unconstrained
+
+```{r}
+
+ord.beta <- c("bray", "canberra", "sor")
+
+data.beta <- lapply(ord.beta, function(beta){
+  
+  tmp.ord <- ordinate(
+      physeq = ps.obj, 
+      method = "PCoA",  # c("DCA", "CCA", "RDA", "CAP", "DPCoA", "NMDS", "MDS", "PCoA")
+      distance = beta  # c("bray", "canberra", "sor")
+    )
+  
+  tmp.ord.data <- list()
+  tmp.ord.data[[beta]] <- plot_ordination(
+      physeq = ps.obj,
+      ordination = tmp.ord,
+      justDF = T
+    )
+  
+}) %>% set_names(ord.beta)
+
+# Unconstrained Plots
+lapply(ord.beta, function(beta){
+  
+  data.beta[[beta]] %>%
+    # mutate(Temp.DPE = paste0(Temperature,"°C_",DPE)) %>%
+    ggplot(aes(x = Axis.1, y = Axis.2)) +
+      stat_ellipse(aes(color = Diet, linetype = PrePostExp)) +
+      geom_point(aes(color = Diet,
+                     fill = PrePostExp),
+                 shape = 21,
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+      # annotate("text", 
+      #          label = p.val.label,
+      #          x = cap.max, y = cap.min, 
+      #          size = 5, 
+      #          color = "black",
+      #          hjust = .95
+      # ) +
+      scale_fill_manual(name = "Treatment", values = pal.Set1[c(1,4,2)]) +
+      scale_color_manual(name = "Diet", values = pal.Dark2)  + 
+      scale_linetype_manual(name = "Treatment", values = c("solid", "dotted", "dashed")) +
+      # scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      # labs(x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+      #      y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+
+})[1:2]
+
+
+```

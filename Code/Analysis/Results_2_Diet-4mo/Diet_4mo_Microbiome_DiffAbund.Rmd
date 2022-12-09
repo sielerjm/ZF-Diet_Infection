@@ -1,0 +1,308 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 month sampling timepoint comparing differential abundance of control fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.T0
+data.alpha <- dt.alphaPlus.T0.melt
+ps.obj <- ps.T0
+dist <- distList.T0
+data.diffAb <- diffAb.conT0
+
+levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
+data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+```
+
+### Differential Abundance
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Diet_4moCtrl/DiffAb"
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 8.5,
+          height = 11,
+          units = "in"
+          )
+
+```
+
+
+
+#### Global
+
+
+```{r}
+data.diffAb <- diffAb.conT0
+tax.agg = tax.agg = aggregate_taxa(ps.obj, tax.level)
+tax.data = taxa.data.table(tax.agg)
+# data <- data %>%
+#   mutate(Diet.Time = paste0(Diet,".",Timepoint), .after = Age)
+
+# Global
+
+tab_w = data.diffAb$res_global[, "W", drop = FALSE]
+tab_p = data.diffAb$res_global[, "p_val", drop = FALSE]
+tab_q = data.diffAb$res_global[, "q_val", drop = FALSE]
+tab_diff = data.diffAb$res_global[, "diff_abn", drop = FALSE]
+
+
+
+# Log transform
+
+samp_frac = data.diffAb$samp_frac
+# Replace NA with 0
+samp_frac[is.na(samp_frac)] = 0 
+
+# Add pesudo-count (1) to avoid taking the log of 0
+log_obs_abn = log(abundances(tax.agg) + 1) 
+
+# Adjust the log observed abundances
+log_obs_abn_adj = t(t(log_obs_abn) - samp_frac)
+
+# Prep for visualization
+
+sig_taxa = data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+  .$Taxon
+
+df_sig = as.data.frame(t(log_obs_abn_adj[sig_taxa, ])) %>%
+  tibble::rownames_to_column("Sample") %>%
+  dplyr::left_join(data %>%
+  tibble::rownames_to_column("Sample") %>%
+                     dplyr::select(Sample, Diet),
+                   by = "Sample") %>%
+  dplyr::filter(!is.na(Diet)) %>%
+  tidyr::pivot_longer(cols = -one_of("Sample", "Diet"), 
+                      names_to = "Taxon", values_to = "value")
+
+df_plot = df_sig %>%
+  dplyr::group_by(Diet, Taxon) %>%
+  dplyr::summarise_if(is.numeric, mean, na.rm = TRUE) %>%
+  dplyr::filter(!str_detect(Taxon, "^Bacteria")) %>% # Filter out unclassified taxa
+  dplyr::mutate(value = round(value, 2)) %>%
+  dplyr::arrange(Diet)
+
+df_plot$Taxon = factor(df_plot$Taxon, levels = sig_taxa)
+
+
+# Join higher taxanomic levels
+df_plot = df_plot %>%
+  rename_with(~tax.level, Taxon) %>%
+  left_join(., tax.data %>% dplyr::select(-last_col()), by = tax.level)
+
+lo = floor(min(df_plot$value))
+up = ceiling(max(df_plot$value))
+mid = (lo + up)/2
+
+
+# Plot Heat map
+
+p_heat_plotDiet = df_plot %>%
+  ggplot(aes(x = Diet, y = Taxon, fill = value)) + 
+  geom_tile(color = "white") +
+  facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ .")), scales = "free", space = "free", switch = "both") +
+  # facet_grid(. ~ Timepoint, scales = "free", switch="both") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(Diet, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+       caption = "4 mo, control") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.x = element_text(size = 12)
+        )
+
+p_heat_plotDiet
+
+lapply(c("pdf", "png"), function(ext){
+  data.diffAb$res_global %>%
+  tibble::rownames_to_column("Taxon") %>%
+  dplyr::filter(diff_abn == TRUE) %>%
+    arrange(Taxon) %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    hline(j = NULL, part = "body") %>%
+    # hline(i = ~ , j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Summary table of abundant taxa (4mo, controls), sig taxa = ", length(sig_taxa))) %>%
+    autofit() %>%
+    save_as_image(path = paste0(
+                            file.path(path.figures, 
+                                      tmp.path, 
+                                      "ANCOMBC2-Diet_4moCtrl."
+                                      ),
+                            ext),  # pdf or png
+                  )
+})
+# save_as_image(path = file.path(path.figures, tmp.path, "ANCOMBC2-Diet_4moCtrl.png"))
+
+
+df_plot %>%
+  select(Diet, Taxon, value) %>%
+  arrange(Diet, Taxon) %>%
+  select(Taxon)
+
+
+```
+
+
+```{r}
+# Lollipop plot
+
+
+df_plot %>%
+    as.data.frame %>%
+    # dplyr::select(-1) %>%
+    pivot_wider(names_from = Diet, values_from = "value") %>% arrange(Taxon) %>%
+    mutate(max.value = pmax(Gemma, Watts, ZIRC), # https://stackoverflow.com/a/32978686
+           min.value = pmin(Gemma, Watts, ZIRC)) %>%
+    mutate(direction = case_when(Gemma == max.value ~ "negative",
+                                 Gemma == min.value ~ "positive",
+                                 Gemma != min.value & Gemma != max.value ~ "neutral")) %>%
+    mutate(mid.value = mean(max.value + min.value)) %>%
+    mutate(direction = fct_relevel(direction, c("positive", "neutral", "negative"))) %>%
+    
+    ggplot() +
+    geom_point(data = df_plot, aes(y = Taxon, x = value, fill = Diet), color = "Black", shape = 21, alpha=0, inherit.aes = F, guide = F) + 
+    geom_segment(aes(y=Taxon, yend=Taxon, x=`min.value`, xend=`max.value`), linetype = "solid", guide = F) +
+    geom_point( aes(y=Taxon, x=Gemma), color = col.Diet[1], size = 3 ) +
+    geom_point( aes(y=Taxon, x=Watts), color = col.Diet[2], size = 3 ) +
+    geom_point( aes(y=Taxon, x=ZIRC), color = col.Diet[3], size = 3 ) +
+    facet_grid(as.formula(paste0(ifelse(tax.level == "Phylum", ".", "Phylum"), "~ .")), scales = "free", space = "free", switch="both") +
+    labs(title = paste0("Heat map of bias-corrected log observed abundances (", tax.level ,")"),
+         x = "Abundance (log transformed)",
+         y = "Phyla")
+
+
+
+```
+
+
+
+
+#### Pairwise
+
+```{r, fig.width=8.5, fig.height=11}
+
+# Dataframes 
+data.diffAb <- diffAb.conT0
+res_pair = data.diffAb$res_pair
+
+
+
+# Sensitivity Scores
+
+tab_sens = data.diffAb$pseudo_sens_tab
+tab_sen <- tab_sens %>%
+    flextable() %>%
+  align(align = "right") %>%
+  colformat_double(digits = 6) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("ANCOM-BC2: Sensitivity Scores")) %>%
+  autofit()
+
+# Pairwise Analysis
+
+df_pair = res_pair %>%
+    rownames_to_column("Taxon") 
+
+df_fig_pair = df_pair %>%
+    filter(diff_DietWatts == 1 | diff_DietZIRC == 1 |
+               diff_DietZIRC_DietWatts == 1) %>%
+    mutate(lfc_Watts = ifelse(diff_DietWatts == 1, 
+                             lfc_DietWatts, 0),
+           lfc_ZIRC = ifelse(diff_DietZIRC == 1, 
+                                   lfc_DietZIRC, 0),
+           lfc_Watts_ZIRC = ifelse(diff_DietZIRC_DietWatts == 1, 
+                                        diff_DietZIRC_DietWatts, 0)) %>%
+    transmute(Taxon, 
+              `Watts vs. Gemma` = round(lfc_Watts, 2), 
+              `ZIRC vs. Gemma` = round(lfc_ZIRC, 2),
+              `Watts vs. ZIRC` = round(lfc_Watts_ZIRC, 2)
+              ) %>%
+    pivot_longer(cols = `Watts vs. Gemma`:`Watts vs. ZIRC`, 
+                 names_to = "group", values_to = "value") %>%
+    arrange(Taxon)
+df_fig_pair$group = factor(df_fig_pair$group, 
+                           levels = c("Watts vs. Gemma",
+                                      "ZIRC vs. Gemma",
+                                      "Watts vs. ZIRC"))
+  
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = 0
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, Taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Log fold change of pairwise comparisons", 
+       caption = "(4mo, controls)") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+lapply(c("pdf", "png"), function(ext){
+  df_pair %>%
+    flextable() %>%
+    align(align = "right") %>%
+    colformat_double(digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+    hline(j = NULL, part = "body") %>%
+    # hline(i = ~ , j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANCOM-BC2: Summary table of pairwise comparisons of abundant taxa (4mo, controls)")) %>%
+    autofit() %>%
+    save_as_image(path = paste0(
+                            file.path(path.figures, 
+                                      tmp.path, 
+                                      "ANCOMBC2-Pairwise_Diet_4moCtrl."
+                                      ),
+                            ext),  # pdf or png
+                  )
+})
+
+```

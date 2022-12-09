@@ -68,3 +68,9 @@ library(multcomp)  # Multiple comparison tests
 library(tidyverse)  # Making your code look pretty and tidy
 
 
+
+# Update BioConductor Packages --------------------------------------------
+
+# if (!require("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install(version = "3.16")

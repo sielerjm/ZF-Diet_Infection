@@ -29,10 +29,6 @@ knitr::opts_chunk$set(
 # Set project path to project level
 proj.path <- paste0(getwd(), "/../../")
 
-# Source Plot Settings
-source(paste0(proj.path,"/Code/Functions/StartFunctions/plot_settings.R"))
-
-
 
 
 ```
@@ -2724,12 +2720,12 @@ lapply(c("anova", "pairwise"), function(x){
 })
 ```
 
-##### Diet:Time
+##### Diet:Time (all)
 
 ```{r}
 
 # Add interaction
-data <- data %>%
+tmp.data <- data %>%
   mutate(Diet.Time = paste0(Diet,".", Timepoint), .after = Age)
 
 # Beta-dispersion Table
@@ -2738,15 +2734,77 @@ beta.disp <- list()
 beta.disp.stats <- list()
 beta.disp <- lapply(dist, function(beta) {
   set.seed(42)
-  betadisper(beta, group = data$Diet.Time)  %>% permutest(pairwise = T, permutations = 999)
+  betadisper(beta, group = tmp.data$Diet.Time)  %>% permutest(pairwise = T, permutations = 999)
   
 }) %>% setNames(ord.beta)
 
 lapply(dist, function(beta) {
   set.seed(42)
-  betadisper(beta, group = data$Diet.Time)  %>% boxplot(col = col.Diet[c(1,1,2,2,3,3)],
+  betadisper(beta, group = tmp.data$Diet.Time)  %>% boxplot(col = col.Diet[c(1,1,2,2,3,3)],
                                                         xlab = "Time")
   
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <- lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    filter(`p-value` < .1) %>%
+    arrange(`p-value`) %>%
+    flextable() %>%
+  set_caption(paste0("filtered p-value < 0.1"))
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl.png"))
+                )
+   })
+  })
+})
+
+```
+
+
+##### Diet:Time (per diet)
+
+###### Gemma
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Gemma")
+
+dist <- distList.conT0T1.Gemma
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Time)  %>% boxplot(col = col.Diet[1],
+                                                        xlab = "Time (Gemma)")
 }) 
 
 
@@ -2771,12 +2829,133 @@ lapply(c("anova", "pairwise"), function(x){
   lapply(beta.disp.stats[x], function(test){
     lapply(methods.beta, function(beta){
   beta.disp.stats[[x]][[beta]] %>%
-  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl.png"))
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Gemma.png"))
                 )
    })
   })
 })
+
+
 ```
+
+
+###### Watts
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Watts")
+
+dist <- distList.conT0T1.Watts
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Time)  %>% boxplot(col = col.Diet[2],
+                                                        xlab = "Time (Watts)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Watts.png"))
+                )
+   })
+  })
+})
+
+
+```
+
+
+
+###### ZIRC
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "ZIRC")
+
+dist <- distList.conT0T1.ZIRC
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Timepoint)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$Time)  %>% boxplot(col = col.Diet[3],
+                                                        xlab = "Time (ZIRC)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_ZIRC.png"))
+                )
+   })
+  })
+})
+
+
+```
+
+
 
 
 ### Physiology
@@ -4055,13 +4234,13 @@ gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Infection"),
 ```{r}
 # Check counts
 data %>%
-  filter(PrePostExp == "Exposed") %>%
-  # mutate(Pathology.Results = 
-  #          case_when(
-  #            Pathology.Results == "negative" ~ "Negative",
-  #            Pathology.Results == "positive" ~ "Positive",
-  #            Pathology.Results == "lumen only" ~ "Positive"
-  #          )) %>%
+  filter(PrePostExp == "Exposed" & Sex == "M") %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
   group_by(Pathology.Results, Diet) %>%
   count(name = "Count")
 
@@ -4126,6 +4305,86 @@ stat.test %>%
   save_as_image(path = file.path(path.figures, tmp.path, "PairwiseFisherTest_PathResults-Diet_7moExp.png"))
 
 ```
+
+Chi-Square
+
+```{r}
+
+data %>%
+  filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet) %>%
+  count(name = "Count")
+
+data %>% 
+  filter(PrePostExp == "Exposed" & Sex == "M") %>%
+  mutate(Pathology.Results =
+         case_when(
+           Pathology.Results == "negative" ~ "Negative",
+           Pathology.Results == "positive" ~ "Positive",
+           Pathology.Results == "lumen only" ~ "Positive"
+         )) %>%
+  rownames_to_column("Fish.ID") %>%
+  group_by(Fish.ID) %>% 
+  distinct(Fish.ID, Pathology.Results, Diet) %>%
+  ungroup %>%
+  summarize(method = chisq.test(Pathology.Results, Diet)$method,
+            statistic = chisq.test(Pathology.Results, Diet)$statistic,
+            parameter = chisq.test(Pathology.Results, Diet)$parameter,
+            p.value = chisq.test(Pathology.Results, Diet)$p.value
+            )
+
+```
+Kruskal-Wallis
+
+```{r}
+data %>%
+  filter(PrePostExp == "Exposed" 
+         # & Sex == "M"
+         ) %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet, Sex) %>%
+  count(name = "Count") %>%
+  glm(formula = Count ~ Diet + Sex + Pathology.Results, family = "poisson") %>% 
+  Anova(type = 2)
+  summary()
+
+```
+
+
+
+GLM Poisson
+
+```{r}
+data %>%
+  filter(PrePostExp == "Exposed" 
+         # & Sex == "M"
+         ) %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet, Sex) %>%
+  count(name = "Count") %>%
+  glm(formula = Count ~ Diet + Sex + Pathology.Results, family = "poisson") %>% 
+  Anova(type = 2)
+  summary()
+
+
+```
+
 
 
 ##### Body Condition Score
@@ -5016,7 +5275,7 @@ lapply(beta.disp, function(beta) {
 })
 ```
 
-##### Diet:Exposure
+##### Diet:Exposure (all)
 
 ```{r fig.width=20}
 
@@ -5084,6 +5343,177 @@ lapply(c("anova", "pairwise"), function(x){
 ```
 
 
+##### Diet:Time (per diet)
+
+###### Gemma
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Gemma")
+
+dist <- distList.all.Gemma
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% boxplot(col = pal.Set1[c(4,1,2)],
+                                                        xlab = "Exposure (Gemma)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Gemma.png"))
+                )
+   })
+  })
+})
+
+
+```
+
+
+###### Watts
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "Watts")
+
+dist <- distList.all.Watts
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% boxplot(col = pal.Set1[c(4,1,2)],
+                                                        xlab = "Exposure (Watts)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_Watts.png"))
+                )
+   })
+  })
+})
+```
+
+
+
+###### ZIRC
+
+```{r}
+
+# Filter for diet
+tmp.data <- data %>%
+  filter(Diet == "ZIRC")
+
+dist <- distList.all.ZIRC
+
+# Beta-dispersion Table
+ord.beta <- c("bray", "canberra", "sor")
+beta.disp <- list()
+beta.disp.stats <- list()
+beta.disp <- lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% permutest(pairwise = T, permutations = 999)
+  
+}) %>% setNames(ord.beta)
+
+lapply(dist, function(beta) {
+  set.seed(42)
+  betadisper(beta, group = tmp.data$PrePostExp)  %>% boxplot(col = pal.Set1[c(4,1,2)],
+                                                        xlab = "Exposure (ZIRC)")
+}) 
+
+
+
+# Anova
+beta.disp.stats[["anova"]] <- lapply(beta.disp, function(beta) {
+  beta$tab %>% 
+    flextable()
+}) %>% setNames(methods.beta)
+
+# Permutation table
+beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
+  # print(beta)
+  beta$pairwise$permuted %>%
+    tidy() %>%
+    rename(Names = names,
+           `p-value` = x) %>%
+    flextable()
+}) %>% setNames(methods.beta)
+
+lapply(c("anova", "pairwise"), function(x){
+  lapply(beta.disp.stats[x], function(test){
+    lapply(methods.beta, function(beta){
+  beta.disp.stats[[x]][[beta]] %>%
+  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-DietTime_4-7moCtrl_ZIRC.png"))
+                )
+   })
+  })
+})
+```
 
 
 ##### Unconstrained

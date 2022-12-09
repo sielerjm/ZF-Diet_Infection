@@ -285,6 +285,13 @@ distList.T1 <- gen.dist.matrices(ps.T1, methods = "taxonomic", cores = num.cores
 distList.conT1 <- gen.dist.matrices(ps.conT1, methods = "taxonomic", cores = num.cores)
 distList.expFin <- gen.dist.matrices(ps.expFin, methods = "taxonomic", cores = num.cores)
 
+distList.conT0T1.Gemma <- gen.dist.matrices(subset_samples(ps.conT0T1, Diet == "Gemma"), methods = "taxonomic", cores = num.cores)
+distList.conT0T1.Watts <- gen.dist.matrices(subset_samples(ps.conT0T1, Diet == "Watts"), methods = "taxonomic", cores = num.cores)
+distList.conT0T1.ZIRC <- gen.dist.matrices(subset_samples(ps.conT0T1, Diet == "ZIRC"), methods = "taxonomic", cores = num.cores)
+
+distList.all.Gemma <- gen.dist.matrices(subset_samples(ps.all, Diet == "Gemma"), methods = "taxonomic", cores = num.cores)
+distList.all.Watts <- gen.dist.matrices(subset_samples(ps.all, Diet == "Watts"), methods = "taxonomic", cores = num.cores)
+distList.all.ZIRC <- gen.dist.matrices(subset_samples(ps.all, Diet == "ZIRC"), methods = "taxonomic", cores = num.cores)
 
 
 

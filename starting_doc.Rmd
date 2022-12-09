@@ -52,6 +52,11 @@ path.input <- paste0(proj.path,"/Data/Input")
 path.results <- paste0(proj.path,"/Results") 
 path.figures <- paste0(proj.path, "/Manuscript/Figures")
 
+# Source Plot Settings
+source(paste0(proj.path,"/Code/Functions/StartFunctions/plot_settings.R"))
+
+
+
 # Save Environment
 # save_env(objects.path, ID = analysis.ID, extra_info = "_pipeline_output")
 

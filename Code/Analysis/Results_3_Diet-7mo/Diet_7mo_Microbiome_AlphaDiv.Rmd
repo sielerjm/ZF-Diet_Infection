@@ -1,0 +1,171 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 7 month sampling timepoint comparing control fish fed the three diets. 
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.conT1
+data.alpha <- dt.alphaPlus.conT1.melt
+ps.obj <- ps.conT1
+dist <- distList.conT1
+data.diffAb <- diffAb.conT1
+
+levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
+data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
+
+```
+
+### Alpha Diversity
+
+```{r}
+
+tmp.path <- "gg_Record/Diet_7moCtrl/Alpha"
+# Plot settings
+gg_record(dir = file.path(path.figures, tmp.path),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+
+#### Diets
+
+```{r Diet-Alpha-Diets}
+
+# library(multcomp)
+# Source: https://stats.stackexchange.com/a/60361
+# Source: https://cran.r-project.org/web/packages/multcomp/vignettes/multcomp-examples.pdf
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Diet, 
+                             data = data.alpha %>% filter(Alpha.Metric == alpha),
+                             family = "quasibinomial"), 
+                             linfct = mcp(Diet = "Tukey")) ) %>% 
+  tidy() %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
+
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
+  select(`.y.`, group1, group2, p.adj.signif)
+})
+
+Fig.1.c <- lapply(methods.alpha, function(alpha){ 
+  data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    ggplot(aes(x = Diet, 
+               y = Alpha.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Set1) + 
+    labs(
+      # title = "",
+      caption = paste0(alpha," (7mo)"),
+      x = "Diet",
+      y = "Alpha Score (normalized)"
+    ) +
+    ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha]], 
+                               label = "p.adj.signif", 
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(.85, .925, 1.1)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5), 
+                       limits = c(0, 1.1)) + 
+  theme(legend.position = "none")
+})
+
+Fig.1.c
+
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Diet",
+       data = subset(data.alpha, Alpha.Metric == alpha),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "GLM-Mod_Alpha-Diet_7moCtrl.png"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet), family = quasibinomial) )")) %>%
+    autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "ANOVA_Alpha-Diet_7moCtrl.png"))
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("adj.p.value" = p_val_format) ) %>%
+  hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet), family = quasibinomial)")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Tukeys_Alpha-Diet_7moCtrl.png"))
+
+```

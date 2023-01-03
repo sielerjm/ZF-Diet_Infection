@@ -42,16 +42,8 @@ num.cores = ifelse(detectCores() > 4, round(detectCores()*.9), round(detectCores
 # Load Phyloseq Object
 ps.all <- readRDS(paste0(path.input, "/phyloseq_rarefied_2022-08-17.rds"))
 
+
 # Update dataframes and datatables ----------------------------------------
-
-
-## Update Phyloseq object --------------------------------------------------
-
-sample_data(ps.all) <- sample.data.frame(ps.all) %>%
-  mutate(Timepoint = case_when(
-    Timepoint == "3mpf" ~ "4mpf",
-    Timepoint == "6mpf" ~ "7mpf"
-  ))
 
 
 # Load Sample Data
@@ -293,7 +285,7 @@ distList.all.Gemma <- gen.dist.matrices(subset_samples(ps.all, Diet == "Gemma"),
 distList.all.Watts <- gen.dist.matrices(subset_samples(ps.all, Diet == "Watts"), methods = "taxonomic", cores = num.cores)
 distList.all.ZIRC <- gen.dist.matrices(subset_samples(ps.all, Diet == "ZIRC"), methods = "taxonomic", cores = num.cores)
 
-
+distList.expFin.males <- gen.dist.matrices(subset_samples(ps.expFin, Sex == "M"), methods = "taxonomic", cores = num.cores)
 
 # Differential Abundance --------------------------------------------------
 

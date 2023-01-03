@@ -1,127 +1,481 @@
 ---
-title: "Infection"
+title: "Infection Analysis"
 author: "Michael Sieler"
-date: "2022-12-09"
-output: html_document
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: default
+  html_document: default
 ---
 
-This document contains analyses related to the 4 and 7 month sampling timepoints comparing infection between fish fed the three diets. 
+## Do infection counts differ between the diets? 
+
+There is a discrepancy between Mike and I's results about whether infection counts differ between the diets. They do, but it depends on how you calculation infection. After digging into the datasets Mike previously sent me on Nov 24th, 2020 and Dec 7th, 2022, I realized that we were calculating infection differently. Mike's counts are based on severity score (0 to 3), while mine are based on presence or absence of infection in the coelom, ovary, kidney or lumen. Using severity score as a metric for infection count, there are indeed signficant differences between the diets. However, when comparing presence/absence of infection between the diets the association is weak, or not significant at the 0.05 threshold. The question remains, which method (severity score or presence/absence) is best for determining differences in infection burden?
+
+One issue I found with the severity score data is that there are 11 cases where an infection is present (e.g., in the lumen), but severity score is 0. Conversely, there are two cases (e.g., DSF 644 & 651) where infection is absent, but severity score is 1. As far as I can tell, there is no indication whether these fish were marked incorrectly as having an infection.
+
+**Update (Dec 19, 2022):**
+
+After discussing with Mike about how infection is counted, I've updated and reran the following script. I had previously been miscounting `lumen only` infections as `positive` and not `negative`, as Mike had been doing. This led to differences in our counts. Mike explains that `lumen only` infections cannot be verified through acid staining as `Myco` infection, therefore should not be included as positive. After rerunning the script with the updated counts, I find signficant differences in infection counts between the diets of male fish. 
 
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 
 knitr::opts_chunk$set(
-  echo = FALSE,
+  echo = T,
   cache = FALSE,
   warning = FALSE,
-  message = FALSE, 
-  # fig.width = 5, fig.height = 5,
-  dpi = 300
+  message = FALSE
 )
 
+# Libraries
+library(flextable)  # pretty tables
+library(readxl)  # read excel files
+library(coin)  # run Chi-square test
+library(car)  # run Anova()
 
+library(tidyverse)  # tidy functions
+
+# Global variables
+proj.path <- "/Users/michaelsieler/Dropbox/Mac (2)/Documents/Sharpton_Lab/Projects_Repository/Kent/ZF-Diet_Infection"
 
 ```
 
-## Global Variables
 
-This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+## Import Data
+
+### Nov 24, 2020
+
+This dataset was emailed to me on November 24th, 2020 from Mike and Colleen. It is titled `OSU Diet Study Primary Excel CA072820 28 July b.xlsx`.
+
+```{r}
+# Import spreadsheet
+data.Nov24 <- readxl::read_excel(file.path(proj.path,"Data/Raw/data_Nov24.xlsx"))
+
+data.Nov24 %>% view()
+
+data.raw <- readxl::read_excel(file.path(proj.path,"Data/Raw/OSU Diet Study Primary Excel CA072820 [RawData].xlsx"))
+
+openxlsx::write.xlsx(x = dt.all, file = file.path(proj.path,"Data/Raw/data_all.xlsx")) 
+
+```
+
+
+### Dec 7, 2022
+
+This data was emailed to me by Mike Kent on Dec 7th, 2022. His original spreadsheet (`DSF Myco Histo Results 5 and 15 wk   Dec 2022.xlsx`) contains his own calculations and annotations, but were removed from this dataset (`mikesData.xlsx`) because it caused import issues.
+
+```{r}
+# Import spreadsheet
+data.Dec7 <- readxl::read_excel( file.path(proj.path,"Data/Raw/data_Dec7.xlsx"))
+
+data.Dec7 %>% view()
+
+```
+
+
+\newpage
+
+## Counts
+
+### Raw data
 
 ```{r}
 
-data <- df.all
-data.alpha <- dt.alphaPlus.all.melt
-data.beta <- df.T1
-data.beta2 <- df.all # Includes pre-exposure fish
-ps.obj <- ps.all
-dist <- distList.T1
-dist2 <- distList.all
+data.raw %>%
+  count()
 
+data.raw %>%
+  group_by(`Tank #`) %>%
+  count()
 
+data.raw %>%
+  filter(`Experiment (e.g. Myco)` == "15 wpe M. chelonae/ 7 mo." |
+         `Experiment (e.g. Myco)` == "4 mo interfacility/myco" #| 
+        # `Experiment (e.g. Myco)` == "5 wpe M. chelonae"    
+         ) %>%
+  group_by(`Experiment (e.g. Myco)`) %>%
+  # group_by(`Tank #`, `Experiment (e.g. Myco)`) %>%
+  count()
 
-# Relevel
-levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
-data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure")
+df.all %>%
+  group_by(Timepoint) %>%
+  count()
 
-levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
-data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+df.all %>%
+  group_by(Timepoint, Diet, Exposure) %>%
+  count()
 
-levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
-data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
-
-levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
-data.beta2$PrePostExp <- relevel(factor(data.beta2$PrePostExp), ref = "Pre-exposure")
-
-levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Unexposed", "Exposed"))
-sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
-# 
-# levels(data.da$PrePostExp) <- factor(levels(data.da$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
-# data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
-
-
+df.all %>%
+  filter(Treatment != "Control") %>%
+  group_by(Diet, Treatment, Tank) %>%
+  count()
 
 ```
 
-## Clean Variables
 
-Presence of infection was marked as `negative`, or `positive` or `lumen only`. To simplify, we combined `lumen only` and `positive` since both indicate presence of infection.
+### Compare counts between Nov 24 and Dec 7 data
 
-```{r}
-data <- data %>%
-  # filter(PrePostExp == "Exposed") %>%
-  mutate(Pathology.Results = 
-           case_when(
-             Pathology.Results == "negative" ~ "Negative",
-             Pathology.Results == "positive" ~ "Positive",
-             Pathology.Results == "lumen only" ~ "Positive"
-           ))
-
-data.alpha <- data.alpha %>%
-  # filter(PrePostExp == "Exposed") %>%
-  mutate(Pathology.Results = 
-           case_when(
-             Pathology.Results == "negative" ~ "Negative",
-             Pathology.Results == "positive" ~ "Positive",
-             Pathology.Results == "lumen only" ~ "Positive"
-           ))
-
-data.beta <- data.alpha %>%
-  # filter(PrePostExp == "Exposed") %>%
-  mutate(Pathology.Results = 
-           case_when(
-             Pathology.Results == "negative" ~ "Negative",
-             Pathology.Results == "positive" ~ "Positive",
-             Pathology.Results == "lumen only" ~ "Positive"
-           ))
-
-sample_data(ps.obj) <- sample.data.frame(ps.obj) %>%
-  # filter(PrePostExp == "Exposed") %>%
-  mutate(Pathology.Results = 
-           case_when(
-             Pathology.Results == "negative" ~ "Negative",
-             Pathology.Results == "positive" ~ "Positive",
-             Pathology.Results == "lumen only" ~ "Positive"
-           ))
-
-
-
-```
-
-## Infection Counts
-
-This chunk of code outputs figures generated in subsequent chunks into relavent figure folder.
+#### Sex and Diet
 
 ```{r}
 
-# Plot settings
-tmp.path <- "gg_Record/Exposure/Infection"
-gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Infection"),
-          device = "png",
-          width = 5,
-          height = 5,
-          units = "in"
-          )
+data.Nov24 %>%
+  # filter(Sex == "M") %>%
+  group_by(Diet, Sex) %>%
+  # group_by(Diet, Pathology.Results) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Original Data, Nov 24, 2020 (male and female fish)")
+
+data.Dec7 %>%
+  # filter(Sex == "M") %>%
+  group_by(Diet, Sex) %>%
+  # group_by(Diet, Pathology.Results) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Mike's Data, Dec 7, 2020 (male and female fish)")
+
+
+```
+
+#### Severity score and Diet
+
+```{r}
+
+data.Nov24 %>%
+  filter(Sex == "M") %>%
+  group_by(Diet, Severity.Score) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Original Data, Nov 24, 2020 (male  fish)")
+
+data.Dec7 %>%
+  filter(Sex == "M") %>%
+  group_by(Diet, Severity.Score) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Mike's Data, Dec 7, 2020 (male fish)")
+
+
+```
+
+#### Pathology results and Diet
+
+```{r}
+
+data.Nov24 %>%
+  filter(Sex == "M") %>%
+  group_by(Diet, Pathology.Results) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Infected Fish by diet (male fish)")
+
+data.Nov24 %>%
+  # filter(Sex == "M") %>%
+  # group_by(Diet, Sex, Pathology.Results) %>%
+    group_by(Diet, Pathology.Results) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Infected Fish by diet and sex")
+
+df.expFin %>%
+  filter(Sex == "M") %>%
+  group_by(Diet, Infection.Status) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Microbiome subset, exposed final (male fish)")
+
+
+df.expFin %>%
+  # filter(Sex == "M") %>%
+  group_by(Diet, Infection.Status) %>%
+  count(name = "Count") %>% 
+  flextable() %>%
+  set_caption(caption = "Microbiome subset, exposed final (male & female fish)")
+
+
+```
+
+\newpage
+
+## Statistical Tests
+
+### Chi-Square
+
+#### Microbiome Subset 
+
+##### Males and Females
+
+```{r}
+
+
+# (Gemma, Watts, ZIRC)
+p <- c( 6, 6, 11)  # Positive
+n <- c( 8, 9, 4 )  # Negative
+
+d <- rbind( p, n)
+d <- as.table(d)
+coin::chisq_test(d)
+
+
+```
+
+##### Males only
+
+```{r}
+
+
+# (Gemma, Watts, ZIRC)
+p <- c( 3, 3, 6)  # Positive
+n <- c( 8, 9, 4 )  # Negative
+
+d <- rbind( p, n)
+d <- as.table(d)
+coin::chisq_test(d)
+
 
 ```
 
 
+#### Nov 24
+
+
+##### Males and Females
+
+```{r}
+
+
+# (Gemma, Watts, ZIRC)
+p <- c( 6, 9, 18)  # Positive
+n <- c( 9, 19, 5 )  # Negative
+
+d <- rbind( p, n)
+d <- as.table(d)
+coin::chisq_test(d) 
+
+
+```
+
+##### Males Only
+
+
+Counts from Nov 24 spreadsheet (counting `lumen only` as positive)
+
+```{r}
+
+# (Gemma, Watts, ZIRC)
+p <- c( 3, 5, 12 )  # Positive
+n <- c( 9, 19, 5 )  # Negative
+
+d <- rbind( p, n)
+d <- as.table(d)
+coin::chisq_test(d)
+
+
+```
+
+
+
+#### Dec 7
+
+
+Mike's numbers from email
+
+```{r}
+
+# Mike's numbers from his email
+# (Gemma, Watts, ZIRC)
+p <- c( 3, 3, 14)  # Positive
+n <- c( 8, 20, 4 )  # Negative
+
+d <- rbind( p, n)
+d <- as.table(d)
+coin::chisq_test(d)
+
+```
+
+
+Counts from spreadsheet
+
+Note: These counts differ from Mike's email, but still return a significant result
+
+```{r}
+
+# (Gemma, Watts, ZIRC)
+p <- c( 3, 3, 12)  # Positive
+n <- c( 9, 21, 5 )  # Negative
+
+d <- rbind( p, n)
+d <- as.table(d)
+coin::chisq_test(d)
+
+```
+
+
+\newpage
+
+### GLM
+
+#### Nov 24
+
+
+Presence/Absence
+
+```{r}
+
+mod.Nov.glm <- data.Nov24 %>%
+  filter(Sex == "M") %>%
+  mutate(Infected =
+           case_when(
+             Pathology.Results == "Negative" ~ 0,
+             Pathology.Results == "Positive" ~ 1
+           )) %>%
+    glm(formula = Infected ~ Diet, family = "binomial") 
+
+mod.Nov.glm %>% summary()
+mod.Nov.glm %>% Anova(type = 2)
+# mod.1 %>% plot()
+
+```
+
+
+
+#### Microbiome Subset
+
+```{r}
+
+mod.expFin.glm <- df.expFin %>%
+  # filter(Sex == "M") %>%
+  mutate(Infected =
+           case_when(
+             Pathology.Results == "Negative" ~ 0,
+             Pathology.Results == "Positive" ~ 1
+           )) %>%
+    glm(formula = Infected ~ Diet, family = "binomial") 
+
+mod.expFin.glm %>% summary()
+mod.expFin.glm %>% Anova(type = 2)
+# mod.1 %>% plot()
+
+```
+
+
+
+<!-- ## Cleaning spreadsheets -->
+
+
+<!-- ### Nov 24, 2020 (Uncleaned) -->
+
+<!-- This dataset was emailed to me on November 24th, 2020 from Mike and Colleen. It is titled `OSU Diet Study Primary Excel CA072820 28 July b.xlsx`. -->
+
+<!-- ```{r} -->
+<!-- # Import spreadsheet -->
+<!-- data.Nov24 <- readxl::read_excel(file.path(proj.path,"Data/Raw/OSU Diet Study Primary Excel CA072820 [RawData].xlsx")) -->
+<!-- ``` -->
+
+
+<!-- ### Dec 7, 2022  (Uncleaned) -->
+
+<!-- This data was emailed to me by Mike Kent on Dec 7th, 2022. His original spreadsheet (`DSF Myco Histo Results 5 and 15 wk   Dec 2022.xlsx`) contains his own calculations and annotations, but were removed from this dataset (`mikesData.xlsx`) because it caused import issues. -->
+
+<!-- ```{r} -->
+<!-- # Import spreadsheet -->
+<!-- data.Dec7 <- readxl::read_excel( file.path(proj.path,"Data/Raw/mikesData.xlsx")) -->
+<!-- ``` -->
+
+
+
+<!-- ## Clean Data -->
+
+<!-- ### Nov 24th Data -->
+
+<!-- ```{r} -->
+
+<!-- # Clean up column  names -->
+<!-- colnames(data.Nov24) <- c("Fish.ID", "Facility", "Sample.Date" , "Age", "Timepoint", "Treatment", "Diet",  "Tank", "Sex" , "Weight", "Length", "Width", "Body.Condition", "Pathology.Results", "Dose" ,"Severity.Score", "Coelom", "Ovary" ,"Kidney", "Lumen.Colonization", "Notes" ) -->
+
+
+<!-- ``` -->
+
+
+
+<!-- # ```{r} -->
+<!-- #  -->
+<!-- # # Clean up pathology results column -->
+<!-- # data.Nov24 <- data.Nov24 %>% -->
+<!-- #   # Make new column with old pathology.results coding scheme -->
+<!-- #     mutate(Pathology.Results.Old = -->
+<!-- #            case_when( -->
+<!-- #              Pathology.Results == "negative" ~ "Negative", -->
+<!-- #              Pathology.Results == "positive" ~ "Positive", -->
+<!-- #              Pathology.Results == "lumen only" ~ "Lumen only" -->
+<!-- #            ), -->
+<!-- #            .after = Pathology.Results) %>% -->
+<!-- #   # Assign lumen only to positive cases -->
+<!-- #     mutate(Pathology.Results = -->
+<!-- #            case_when( -->
+<!-- #              Pathology.Results == "negative" ~ "Negative", -->
+<!-- #              Pathology.Results == "positive" ~ "Positive", -->
+<!-- #              Pathology.Results == "lumen only" ~ "Negative" -->
+<!-- #            )) %>% -->
+<!-- #   # Capitalize diet names -->
+<!-- #   mutate(Diet = -->
+<!-- #            case_when( -->
+<!-- #              Diet == "gemma" ~ "Gemma", -->
+<!-- #              Diet == "watts" ~ "Watts", -->
+<!-- #              Diet == "zirc" ~ "ZIRC", -->
+<!-- #            )) -->
+<!-- #  -->
+<!-- # # Simplify time point names for 15 wpe data -->
+<!-- # data.Nov24$Timepoint[data.Nov24$Timepoint=="15 wpe M. chelonae/ 7 mo."] <- "7mpf" -->
+<!-- #  -->
+<!-- # # Subset data to only include pathogen exposed, final time point samples -->
+<!-- # data.Nov24 <- data.Nov24 %>% -->
+<!-- #   filter(Timepoint == "7mpf" & Treatment != "control") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # # Should equal 66 -->
+<!-- # data.Nov24 %>% -->
+<!-- #   count() -->
+<!-- #  -->
+<!-- # ``` -->
+
+
+
+<!-- ### Dec 7 Data -->
+
+<!-- ```{r} -->
+
+<!-- # Create a new column of infection counts based on Mike's approach -->
+<!-- data.Dec7 <- data.Dec7 %>% -->
+<!--   mutate(Infection.Mike = -->
+<!--            case_when( -->
+<!--              Severity.Score > 0 ~ "Positive",  # If severity score is greater than 0, count as positive -->
+<!--              Severity.Score == 0 ~ "Negative",  # if severity score is 0, count as negative -->
+<!--            ), -->
+<!--     .after = Severity.Score) -->
+
+<!-- # Create a Diet column -->
+<!-- data.Dec7 <- data.Dec7 %>% -->
+<!--   mutate(Diet = -->
+<!--            case_when( -->
+<!--              str_detect(Tank.ID, "G") ~ "Gemma", -->
+<!--              str_detect(Tank.ID, "W") ~ "Watts", -->
+<!--              str_detect(Tank.ID, "Z") ~ "ZIRC", -->
+<!--            ), -->
+<!--     .before = Severity.Score) -->
+
+<!-- # Should equal 66 -->
+<!-- data.Dec7 %>% -->
+<!--   count() -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # Export Data -->
+
+<!-- openxlsx::write.xlsx(x = data.Nov24, file = file.path(proj.path,"Data/Raw/data_Nov24.xlsx")) -->
+<!-- openxlsx::write.xlsx(x = data.Dec7, file = file.path(proj.path,"Data/Raw/data_Dec7.xlsx")) -->
+
+<!-- ``` -->

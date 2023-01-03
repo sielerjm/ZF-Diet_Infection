@@ -1,0 +1,141 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing infection between fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.expFin
+data.all <- readxl::read_excel(file.path(proj.path,"Data/Raw/data_Nov24.xlsx"))  # Spreadsheet of all histopath data
+data.alpha <- dt.alphaPlus.expFin.melt
+data.beta <- df.expFin
+ps.obj <- ps.expFin
+dist <- distList.expFin
+
+```
+
+## Clean Variables
+
+Presence of infection was marked as `negative`, or `positive` or `lumen only`. Because `lumen only` cannot be verified as a Myco chelonae infection, we combined `lumen only` and `negative`.
+
+
+```{r}
+# Relevel
+
+## Data 
+# levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure").
+
+levels(data$Infection.Status) <- factor(levels(data$Infection.Status), levels = c("Negative", "Positive"))
+data$Infection.Status <- relevel(factor(data$Infection.Status), ref = "Negative")
+
+## Alpha
+
+# levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$Infection.Status) <- factor(levels(data.alpha$Infection.Status), levels = c("Negative", "Positive"))
+data.alpha$Infection.Status <- relevel(factor(data.alpha$Infection.Status), ref = "Negative")
+
+## Beta
+# 
+# levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+# data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta$Infection.Status) <- factor(levels(data.beta$Infection.Status), levels = c("Negative", "Positive"))
+data.beta$Infection.Status <- relevel(factor(data.beta$Infection.Status), ref = "Negative")
+
+## Sample Data
+
+# levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+
+levels(sample_data(ps.obj)$Infection.Status) <- factor(levels(sample_data(ps.obj)$Infection.Status), levels = c("Negative", "Positive"))
+sample_data(ps.obj)$Infection.Status <- relevel(factor(sample_data(ps.obj)$Infection.Status), ref = "Negative")
+```
+
+
+This chunk of code outputs figures generated in subsequent chunks into relavent figure folder.
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/Infection"
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Infection/Physiology"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+## Body Condition Score
+
+```{r}
+
+
+data.all %>% 
+  filter(Timepoint == "7mpf") %>%
+  lm(data = ., formula = Body.Condition.Score ~ Pathology.Results*Diet, na.action = "na.exclude") %>%
+  anova() %>%
+  tidy() %>%
+    mutate(sig = ifelse(p.value <= 0.05, "*", ""))%>% 
+  flextable() %>%
+  align(align = "right") %>%
+  colformat_double( digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.value" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Diet*Pathology.Results")) %>%
+  autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "LM_BCS-DietPath_7mo.png"))
+
+
+data %>% 
+  filter(Timepoint == "7mpf") %>%
+    ggplot(aes(x = Pathology.Results, 
+               y = Body.Condition.Score
+               )) +
+    geom_boxplot(aes(fill = Diet)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet) +
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      # caption = "",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) 
+
+
+
+
+```

@@ -1,0 +1,375 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing pathogen exposed fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.expFin
+data.alpha <- dt.alphaPlus.expFin.melt
+data.beta <- df.expFin
+ps.obj <- ps.expFin
+dist <- distList.expFin
+
+```
+
+## Clean Variables
+
+Presence of infection was marked as `negative`, or `positive` or `lumen only`. Because `lumen only` cannot be verified as a Myco chelonae infection, we combined `lumen only` and `negative`.
+
+
+```{r}
+# Relevel
+
+## Data 
+# levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure").
+
+levels(data$Infection.Status) <- factor(levels(data$Infection.Status), levels = c("Negative", "Positive"))
+data$Infection.Status <- relevel(factor(data$Infection.Status), ref = "Negative")
+
+## Alpha
+
+# levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$Infection.Status) <- factor(levels(data.alpha$Infection.Status), levels = c("Negative", "Positive"))
+data.alpha$Infection.Status <- relevel(factor(data.alpha$Infection.Status), ref = "Negative")
+
+## Beta
+# 
+# levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+# data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta$Infection.Status) <- factor(levels(data.beta$Infection.Status), levels = c("Negative", "Positive"))
+data.beta$Infection.Status <- relevel(factor(data.beta$Infection.Status), ref = "Negative")
+
+## Sample Data
+
+# levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+
+levels(sample_data(ps.obj)$Infection.Status) <- factor(levels(sample_data(ps.obj)$Infection.Status), levels = c("Negative", "Positive"))
+sample_data(ps.obj)$Infection.Status <- relevel(factor(sample_data(ps.obj)$Infection.Status), ref = "Negative")
+```
+
+
+## Beta Diversity
+
+
+This chunk of code outputs figures generated in subsequent chunks into relavent figure folder.
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/Infection"
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Infection/Beta"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+
+### Males and Females
+
+#### Infection
+
+```{r Path-Beta-Exp}
+
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Infection.Status"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+
+lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Infection.Status )) +
+      geom_point(aes(color = Infection.Status,
+                     # shape = Diet
+                     ),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+
+      scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+      scale_color_manual(values = pal.Set1[c(4,1,2)])  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      # scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(title = beta,
+           x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+})[1]
+
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Infection")) 
+
+```
+
+
+#### Diet:Infection
+
+```{r Path-Beta-Exp}
+
+
+
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Infection.Status", "Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = ps.obj,
+                          data = data.beta,
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+
+lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Infection.Status )) +
+      geom_point(aes(color = Infection.Status,
+                     shape = Diet),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+      # annotate("text", 
+      #          label = p.val.label,
+      #          x = cap.max, y = cap.min, 
+      #          size = 5, 
+      #          color = "black",
+      #          hjust = .95
+      # ) +
+      scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+      scale_color_manual(values = pal.Set1[c(4,1,2)])  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      # scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(title = beta,
+           x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+})[1]
+
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Infection*Diet")) 
+
+```
+
+
+### Males only
+
+#### Infection
+
+```{r Path-Beta-Exp}
+
+dist <- distList.expFin.males
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Infection.Status"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = subset_samples(ps.obj, Sex == "M"),
+                          data = subset(data.beta, Sex == "M"),
+                          terms = 1,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+
+lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Infection.Status )) +
+      geom_point(aes(color = Infection.Status,
+                     # shape = Diet
+                     ),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+
+      scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+      scale_color_manual(values = pal.Set1[c(4,1,2)])  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      # scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(title = beta,
+           x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+})[1]
+
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Infection")) 
+
+```
+
+
+#### Diet:Infection
+
+```{r Path-Beta-Exp}
+
+
+dist <- distList.expFin.males
+
+
+# Full dbRDA models
+mod <- full_dbrda_model(vars = c("Infection.Status", "Diet"),  # Enter variables as a list "c(var.A, var.B, var.C)"
+                          distance = dist,
+                          methods = methods.beta,
+                          names = set_names_beta,
+                          physeq = subset_samples(ps.obj, Sex == "M"),
+                          data = subset(data.beta, Sex == "M"),
+                          terms = 2,  # if you want interaction terms enter 2, otherwise 1
+                          num.cores = num.cores
+                        )
+
+anova <- beta_anova(beta.model = mod,
+                    methods = methods.beta,
+                    names = set_names_beta,
+                    num.cores = num.cores)
+
+
+# Plot prep
+dt.ord.full.beta <- ord_dt_list(mod, ps.obj)
+beta.dt.full <- samp_coord_dt(dt.ord.full.beta, methods.beta)
+beta.axis.full <- axis_labels(dt.ord.full.beta)
+
+
+
+lapply(methods.beta, function(beta){
+  
+  p.val <- anova$p.value[anova$metric == beta][1]
+  p.val.label <- paste0("p-value", ifelse(p.val == 0.001, " < ", " = " ), p.val)
+  cap.min <- min(dt.ord.full.beta[[beta]]$sample.coords[[3]])
+  cap.max <- max(dt.ord.full.beta[[beta]]$sample.coords[[2]])
+
+  dt.ord.full.beta[[beta]]$sample.coords %>%
+    ggplot(aes(x = .[[2]], y = .[[3]])) +
+      stat_ellipse(aes(color = Infection.Status )) +
+      geom_point(aes(color = Infection.Status,
+                     shape = Diet),
+                 size = 2.5,
+                 stroke = 1,
+                 alpha = 1 ) +
+      # annotate("text", 
+      #          label = p.val.label,
+      #          x = cap.max, y = cap.min, 
+      #          size = 5, 
+      #          color = "black",
+      #          hjust = .95
+      # ) +
+      scale_fill_manual(values = pal.Set1[c(4,1,2)]) +
+      scale_color_manual(values = pal.Set1[c(4,1,2)])  + 
+      scale_linetype_manual(name = "Treatment", values = c("dashed", "solid")) +
+      # scale_shape_manual(name = "Treatment", values = c(19, 1)) + 
+      labs(title = beta,
+           x = dt.ord.full.beta[[beta]]$axes.labs[1], 
+           y = dt.ord.full.beta[[beta]]$axes.labs[2]) + 
+      theme(legend.position = "bottom")
+})[1]
+
+
+
+stats_table(anova) %>%
+  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Infection*Diet")) 
+
+```
+

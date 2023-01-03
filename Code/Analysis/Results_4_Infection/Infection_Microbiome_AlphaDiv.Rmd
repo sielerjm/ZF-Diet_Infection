@@ -1,0 +1,653 @@
+---
+title: "Diet_4mo_Physiology"
+author: "Michael Sieler"
+date: "2022-12-09"
+output: html_document
+---
+
+
+
+This document contains analyses related to the 4 and 7 month sampling timepoints comparing infection between fish fed the three diets. 
+
+
+```{r}
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+
+
+```
+
+## Global Variables
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.expFin
+data.alpha <- dt.alphaPlus.expFin.melt
+data.beta <- df.expFin
+ps.obj <- ps.expFin
+dist <- distList.expFin
+
+```
+
+## Clean Variables
+
+Presence of infection was marked as `negative`, or `positive` or `lumen only`. Because `lumen only` cannot be verified as a Myco chelonae infection, we combined `lumen only` and `negative`.
+
+
+```{r}
+# Relevel
+
+## Data 
+# levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure").
+
+levels(data$Infection.Status) <- factor(levels(data$Infection.Status), levels = c("Negative", "Positive"))
+data$Infection.Status <- relevel(factor(data$Infection.Status), ref = "Negative")
+
+## Alpha
+
+# levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$Infection.Status) <- factor(levels(data.alpha$Infection.Status), levels = c("Negative", "Positive"))
+data.alpha$Infection.Status <- relevel(factor(data.alpha$Infection.Status), ref = "Negative")
+
+## Beta
+# 
+# levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+# data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta$Infection.Status) <- factor(levels(data.beta$Infection.Status), levels = c("Negative", "Positive"))
+data.beta$Infection.Status <- relevel(factor(data.beta$Infection.Status), ref = "Negative")
+
+## Sample Data
+
+# levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+
+levels(sample_data(ps.obj)$Infection.Status) <- factor(levels(sample_data(ps.obj)$Infection.Status), levels = c("Negative", "Positive"))
+sample_data(ps.obj)$Infection.Status <- relevel(factor(sample_data(ps.obj)$Infection.Status), ref = "Negative")
+```
+
+
+
+This chunk of code outputs figures generated in subsequent chunks into relavent figure folder.
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/Infection"
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/Infection/Alpha"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+## Alpha Diversity
+
+```{r}
+
+data %>%
+  group_by(Diet, Infection.Status) %>%
+  count()
+
+```
+
+
+
+### Males and Females
+
+#### Infection
+
+```{r Path-Alpha-Exp}
+
+
+
+# Tukey Test
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Infection.Status, 
+                             data = data.alpha %>% filter(Alpha.Metric == alpha),
+                             family = "quasibinomial"), 
+                             linfct = mcp(Infection.Status = "Tukey")) ) %>% 
+  tidy() %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
+
+
+# plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+#   tukey.test.list[[alpha]] %>% 
+#   as_tibble() %>% 
+#   select(Diet, `.y.`, group1, group2, p.adj.signif)
+# })
+
+
+
+# Plot
+
+lapply(methods.alpha, function(alpha){
+  
+  data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    # filter(Sex == "M") %>%
+    ggplot(aes(x=factor(Infection.Status),
+               y = Alpha.Score,
+               )) +
+    geom_boxplot(aes(fill = Infection.Status)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = col.Exp[c(3,2)]) +
+    scale_color_manual(values = col.Exp[c(3,2)]) + 
+    labs(
+      # title = "",
+      caption = paste0(alpha, " (Exposed)"),
+      x = "Infection Status",
+      y = "Alpha Score (normalized)"
+    ) +
+    #   ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha.metric]],
+    #                            label = "p.adj.signif",
+    #                            size = 6,
+    #                            bracket.size = 1,
+    #                            # y.position = 1
+    #                            y.position = c(1, 1.1,1.2,
+    #                                           .9, 1,1.15,
+    #                                           1, 1.1,1.2)
+    #                            ) +
+    # scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
+    #                    limits = c(0, 1.2)) + 
+    theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = .5))  
+  
+})
+
+
+
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Infection.Status",
+       data = subset(data.alpha, Alpha.Metric == alpha 
+                     # & Sex == "M"
+                     ),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Pathology), family = quasibinomial)")) #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "GLM_Alpha-DietPath_Exp7mo.png"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    # hline(i = seq(2, 6 ,2), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Infection), family = quasibinomial) )")) %>%
+    autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "ANOVA_Alpha-DietPath_Exp7mo.png"))
+
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p.adj" = p_val_format) ) %>%
+  # hline(i = c(3,6, 9, 12, 15, 18, 21, 24), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Infection), family = quasibinomial)")) %>%
+  autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "Tukeys_Alpha-DietPrePostExp_All.png"))
+
+```
+
+#### Diet:Infection
+
+```{r Path-Alpha-Exp}
+
+
+
+# Tukey Test
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  test <- data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    # filter(Sex == "M") %>%
+  group_by(Diet) %>%
+  nest(data = -Diet) %>%
+  mutate(test = map(.x=data, 
+                    ~summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Infection.Status, 
+                         data = .x,
+                         family = "quasibinomial"), 
+                         linfct = mcp(Infection.Status = "Tukey")) )%>% tidy
+                    )) %>%
+  unnest(test) %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(data, null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  arrange(Diet) %>%
+  mutate(metric = alpha, .before = 1)
+})
+
+
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
+  select(Diet, `.y.`, group1, group2, p.adj.signif)
+})
+
+
+
+# Plot
+
+lapply(methods.alpha, function(alpha){
+  
+  data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    # filter(Sex == "M") %>%
+    ggplot(aes(x=factor(Infection.Status),
+               y = Alpha.Score,
+               )) +
+    geom_boxplot(aes(fill = Infection.Status)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = col.Exp[c(3,2)]) +
+    scale_color_manual(values = col.Exp[c(3,2)]) + 
+    labs(
+      # title = "",
+      caption = paste0(alpha, " (Exposed)"),
+      x = "Infection Status",
+      y = "Alpha Score (normalized)"
+    ) +
+    #   ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha.metric]],
+    #                            label = "p.adj.signif",
+    #                            size = 6,
+    #                            bracket.size = 1,
+    #                            # y.position = 1
+    #                            y.position = c(1, 1.1,1.2,
+    #                                           .9, 1,1.15,
+    #                                           1, 1.1,1.2)
+    #                            ) +
+    # scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
+    #                    limits = c(0, 1.2)) + 
+    theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = .5))  
+  
+})
+
+
+
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Infection.Status*Diet",
+       data = subset(data.alpha, Alpha.Metric == alpha 
+                     # & Sex == "M"
+                     ),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Diet*Pathology), family = quasibinomial)")) #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "GLM_Alpha-DietPath_Exp7mo.png"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    hline(i = seq(3, 9,3), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet*Infection), family = quasibinomial) )")) %>%
+    autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "ANOVA_Alpha-DietPath_Exp7mo.png"))
+
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p.adj" = p_val_format) ) %>%
+  # hline(i = c(3,6, 9, 12, 15, 18, 21, 24), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet*Infection), family = quasibinomial)")) %>%
+  autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "Tukeys_Alpha-DietPrePostExp_All.png"))
+
+```
+
+### Males only
+
+#### Infection
+
+```{r Path-Alpha-Exp}
+
+
+
+# Tukey Test
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Infection.Status, 
+                             data = data.alpha %>% filter(Alpha.Metric == alpha & Sex == "M" ),
+                             family = "quasibinomial"), 
+                             linfct = mcp(Infection.Status = "Tukey")) ) %>% 
+  tidy() %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  mutate(metric = alpha, .before = 1)
+})
+
+
+# plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+#   tukey.test.list[[alpha]] %>% 
+#   as_tibble() %>% 
+#   select(Diet, `.y.`, group1, group2, p.adj.signif)
+# })
+
+
+
+# Plot
+
+lapply(methods.alpha, function(alpha){
+  
+  data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    filter(Sex == "M") %>%
+    ggplot(aes(x=factor(Infection.Status),
+               y = Alpha.Score,
+               )) +
+    geom_boxplot(aes(fill = Infection.Status)) +
+    geom_quasirandom(size = 1) +
+    # facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = col.Exp[c(3,2)]) +
+    scale_color_manual(values = col.Exp[c(3,2)]) + 
+    labs(
+      # title = "",
+      caption = paste0(alpha, " (Exposed, males only)"),
+      x = "Infection Status",
+      y = "Alpha Score (normalized)"
+    ) +
+    #   ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha.metric]],
+    #                            label = "p.adj.signif",
+    #                            size = 6,
+    #                            bracket.size = 1,
+    #                            # y.position = 1
+    #                            y.position = c(1, 1.1,1.2,
+    #                                           .9, 1,1.15,
+    #                                           1, 1.1,1.2)
+    #                            ) +
+    # scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
+    #                    limits = c(0, 1.2)) + 
+    theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = .5))  
+  
+})
+
+
+
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Infection.Status",
+       data = subset(data.alpha, Alpha.Metric == alpha & Sex == "M" 
+                     # & Sex == "M"
+                     ),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Pathology), family = quasibinomial)")) #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "GLM_Alpha-DietPath_Exp7mo.png"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    # hline(i = seq(2, 6 ,2), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Infection), family = quasibinomial) ), males only")) %>%
+    autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "ANOVA_Alpha-DietPath_Exp7mo.png"))
+
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p.adj" = p_val_format) ) %>%
+  # hline(i = c(3,6, 9, 12, 15, 18, 21, 24), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Infection), family = quasibinomial), males only")) %>%
+  autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "Tukeys_Alpha-DietPrePostExp_All.png"))
+
+```
+
+#### Diet:Infection
+
+```{r Path-Alpha-Exp}
+
+
+
+# Tukey Test
+
+tukey.test.list <- lapply(methods.alpha, function(alpha){
+  test <- data.alpha %>%
+  filter(Alpha.Metric == alpha & Sex == "M") %>%
+    # filter(Sex == "M") %>%
+  group_by(Diet) %>%
+  nest(data = -Diet) %>%
+  mutate(test = map(.x=data, 
+                    ~summary(multcomp::glht(glm(formula = Alpha.Score ~ -1 + Infection.Status, 
+                         data = .x,
+                         family = "quasibinomial"), 
+                         linfct = mcp(Infection.Status = "Tukey")) )%>% tidy
+                    )) %>%
+  unnest(test) %>%
+  separate(contrast, c('group1', 'group2'), sep = " - ") %>%
+  select(-c(data, null.value)) %>%
+  rename(p.adj = adj.p.value) %>%
+  mutate(p.adj.signif = case_when(p.adj < 0.05 ~ "*",
+                                  p.adj >= 0.05 ~ "ns")) %>%
+  mutate(`.y.` = "Alpha.Score", .after = 1) %>%
+  arrange(Diet) %>%
+  mutate(metric = alpha, .before = 1)
+})
+
+
+plot.sig.labs <- lapply(methods.alpha, function(alpha){ 
+  tukey.test.list[[alpha]] %>% 
+  as_tibble() %>% 
+  select(Diet, `.y.`, group1, group2, p.adj.signif)
+})
+
+
+
+# Plot
+
+lapply(methods.alpha, function(alpha){
+  
+  data.alpha %>%
+  filter(Alpha.Metric == alpha) %>%
+    filter(Sex == "M") %>%
+    ggplot(aes(x=factor(Infection.Status),
+               y = Alpha.Score,
+               )) +
+    geom_boxplot(aes(fill = Infection.Status)) +
+    geom_quasirandom(size = 1) +
+    facet_grid(. ~ Diet, scale = "free") +
+    scale_fill_manual(values = col.Exp[c(3,2)]) +
+    scale_color_manual(values = col.Exp[c(3,2)]) + 
+    labs(
+      # title = "",
+      caption = paste0(alpha, " (Exposed), males only"),
+      x = "Infection Status",
+      y = "Alpha Score (normalized)"
+    ) +
+    #   ggpubr::stat_pvalue_manual(plot.sig.labs[[alpha.metric]],
+    #                            label = "p.adj.signif",
+    #                            size = 6,
+    #                            bracket.size = 1,
+    #                            # y.position = 1
+    #                            y.position = c(1, 1.1,1.2,
+    #                                           .9, 1,1.15,
+    #                                           1, 1.1,1.2)
+    #                            ) +
+    # scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1), 
+    #                    limits = c(0, 1.2)) + 
+    theme(legend.position = "none",
+        axis.text.x = element_text(angle = 0, hjust = .5))  
+  
+})
+
+
+
+
+# Stats
+
+# Build GLM Model
+mod.list <- lapply(methods.alpha, function(alpha){
+  glm( formula = "Alpha.Score ~ Infection.Status*Diet",
+       data = subset(data.alpha, Alpha.Metric == alpha & Sex == "M" 
+                     # & Sex == "M"
+                     ),
+       family = "quasibinomial")
+}) %>% setNames(methods.alpha)
+
+# Model Output
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% 
+    tidy() %>%
+    mutate(metric = x, .before = 1) %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+  flextable() %>%
+  colformat_double(j = 3:5, digits = 3) %>%
+  merge_v(j = 1)  %>%
+  set_formatter(values = list("p.value" = p_val_format) ) %>%
+  # hline(i = c(3,6), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("glm(Alpha.Score ~ Diet*Pathology), family = quasibinomial), males only")) #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "GLM_Alpha-DietPath_Exp7mo.png"))
+
+# Anova
+lapply(methods.alpha, function(x){
+  mod.list[[x]] %>% Anova(type = 2) %>%
+    tidy() %>%
+    mutate(metric = x, .before = 1)  %>%
+      mutate(sig = ifelse(p.value <= 0.05, "*", ""))
+}) %>% bind_rows() %>%
+    flextable() %>%
+    # align(j = 3:6, align = "right") %>%
+    colformat_double(j = 3, digits = 3) %>%
+    merge_v(j = 1) %>%
+    set_formatter(values = list("p.value" = p_val_format) ) %>%
+    hline(i = seq(3, 9,3), j = NULL, border = NULL, part = "body") %>%
+    set_caption(paste0("ANOVA( glm(Alpha.Score ~ Diet*Infection), family = quasibinomial) )")) %>%
+    autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "ANOVA_Alpha-DietPath_Exp7mo.png"))
+
+
+# Tukey's Pairwise Comparison
+tukey.test.list %>%
+  bind_rows() %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:9, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p.adj" = p_val_format) ) %>%
+  # hline(i = c(3,6, 9, 12, 15, 18, 21, 24), j = NULL, border = NULL, part = "body") %>%
+  set_caption(paste0("Pairwise Tukey's HSD, p.adj: Dunnett. glm(Alpha.Score ~ Diet*Infection), family = quasibinomial), males only")) %>%
+  autofit() #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, "Tukeys_Alpha-DietPrePostExp_All.png"))
+
+```

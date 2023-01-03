@@ -104,10 +104,10 @@ View(sample.data.frame(ps0))
 ```{r}
 
 
-sample_data(ps0) <- sample.data.frame(ps0) %>%
+sample_data(ps0) <- 1 %>%
   mutate(Exposure = case_when(
-    Treatment == "control" ~ "Unexp",
-    Treatment != "control" ~ "Exp"), 
+    Treatment == "control" ~ "Unexposed",
+    Treatment != "control" ~ "Exposed"), 
     .after = Treatment)
 
 sample_data(ps0) <- sample.data.frame(ps0) %>%
@@ -129,8 +129,8 @@ sample_data(ps0)$Diet[sample_data(ps0)$Diet=="gemma"] <- "Gemma"
 sample_data(ps0)$Diet[sample_data(ps0)$Diet=="watts"] <- "Watts"
 
 # Timepoint: Initial/Final
-sample_data(ps0)$Timepoint[sample_data(ps0)$Timepoint=="4 mo interfacility/myco"] <- "3mpf"
-sample_data(ps0)$Timepoint[sample_data(ps0)$Timepoint=="15 wpe M. chelonae/ 7 mo."] <- "6mpf"
+sample_data(ps0)$Timepoint[sample_data(ps0)$Timepoint=="4 mo interfacility/myco"] <- "4mpf"
+sample_data(ps0)$Timepoint[sample_data(ps0)$Timepoint=="15 wpe M. chelonae/ 7 mo."] <- "7mpf"
 
 # Infection Status
 # sample_data(ps0)$Infection.Status[sample_data(ps0)$Infection.Status==0] <- "0"
@@ -364,7 +364,7 @@ StackedBarPlot_Strain_phylum
 levels(sample_data(ps1)$Treatment) <- factor(levels(sample_data(ps1)$Treatment), levels = c("Control", "Dose_1", "Dose_2"))   # Not sure why unique() is needed here
 levels(sample_data(ps1)$Treatment)
 
-levels(sample_data(ps1)$Timepoint) <- factor(levels(sample_data(ps1)$Timepoint), levels = c("3mpf", "6mpf"))
+levels(sample_data(ps1)$Timepoint) <- factor(levels(sample_data(ps1)$Timepoint), levels = c("4mpf", "7mpf"))
 levels(sample_data(ps1)$Timepoint)
 
 levels(sample_data(ps1)$Exposure) <- factor(levels(sample_data(ps1)$Exposure), levels = c("Unexp", "Exp"))

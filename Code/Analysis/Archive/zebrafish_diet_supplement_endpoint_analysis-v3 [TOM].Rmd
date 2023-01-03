@@ -1,0 +1,524 @@
+---
+title: "Zebrafish Diet Supplement Endpoint Analysisv2"
+author: "TJS"
+date: "July 22, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(tidyverse)
+library(cowplot)
+library(pander)
+library(MASS)
+```
+
+#### Set up our environment
+
+```{r load-env}
+setwd("/Users/sharptot/Dropbox/sharpton/projects/kent_work/diet_supplement/")
+dt <- fread( "OSU Diet Study Primary Excel CA072820-cleaned.csv")
+```
+
+#### Drop the pcap exposure samples
+
+```{r no-pcap}
+dt2 <- dt %>%
+  filter(
+    Experiment != "4 mo interfacility/pcapp" 
+  ) 
+```
+
+## 1. Does the weight and body condition score differ between diets among the control groups at the 3 month time points?
+
+### Summary: We used a linear model to assess if diet, sex, or the statistical interaction of these terms significantly associates with the weight of a fish (in mg). For this analysis, we only considered the fish that are part of the 3 month interfacility comparison. Our analysis finds that males significantly differ from females in terms of their weight (males are on average lighter, slope = -43.5, p = 0.0032), but that there are no other significant differences. 
+
+### We repeated this analysis but used body condition score instead of weight. This second analysis revealed no differences in body condition score by diet or sex.
+
+### The following code documents the analysis.
+
+#### Weight analysis
+```{r 3-month-analysis-weight}
+## Filter the data
+data <- dt2 %>%
+  filter(
+    Age.Days == "101" |
+    Age.Days == "102"
+  )
+## Weight.mg
+### Visualize. Watts looks lower, but the differences are not significant by lm() [below]
+data %>%
+  ggplot(aes(y=Weight.mg, x=Diet, fill=Sex )) + 
+  geom_boxplot()
+### lm(). Only Sex returns a sig effect
+mod <- lm( data = data, Weight.mg ~ Diet*Sex )
+pander(summary(mod))
+```
+
+### Body condition score analysis
+```{r 3-month-analysis-body}
+## Body Condition
+### Visualize
+data %>%
+  ggplot(aes(y=Body.Condition, x=Diet, fill=Sex )) + 
+  geom_boxplot()
+### lm()
+mod <- lm( data = data, Body.Condition ~ Diet*Sex )
+pander(summary(mod))
+```
+
+# 2. Does the weight and body condition score differ between diets among the control groups at the 4 month time points?
+
+### Summary: We used a linear model to assess if diet, sex, or the statistical interaction of these terms significantly associates with the weight of a fish (in mg). For this analysis, we only considered the fish that are part of the 4 month interfacility comparison (i.e., myco controls). These are control samples collected on days 129 and 130.
+
+### Our analysis finds that fish fed a ZIRC diet are on average heavier than fish fed other diets (estimate = 48.79, p = 0.03316). Additionally, males are lighter than females (estimate = -63.11, p = 0.008966).  No other significant differences were detected.
+
+### We repeated this analysis but used body condition score instead of weight. Our analysis finds that males significantly differ from females in terms of their body condition score, but only on the Watts Diet (males fed Watts are on average slightly improved in body condition score than females fed Watts, slope = 0.9725, p = 0009015), but that there are no other significant differences. That said, this Watts diet effect on males appears to be driven by 1 or 2 outlier samples (e.g., body condition = 3.897) and is likely a spurrious result.
+
+### The following code documents these analyses.
+
+### Let's start with a Weight analysis.
+```{r 4-month-analysis-weight}
+## Filter the data. We use artifical parameter 129 to get 129 and 130 day samples
+data <- dt2 %>%
+  filter(
+    ( Age.Days == "129" |
+      Age.Days == "130" ) &
+    Treatment == "control"
+  )
+## Weight.mg
+### Visualize
+data %>%
+  ggplot(aes(y=Weight.mg, x=Diet, fill=Sex)) + 
+  geom_boxplot()
+### lm()
+mod <- lm( data = data, Weight.mg ~ Diet*Sex )
+pander(summary(mod))
+```
+
+### Now for body condition. 
+```{r 4-month-analysis-body}
+## Body Condition
+### Visualize
+data %>%
+  ggplot(aes(y=Body.Condition, x=Diet, fill = Sex )) + 
+  geom_boxplot() + 
+  geom_point(pch = 21, position = position_jitterdodge())
+
+### lm()
+mod <- lm( data = data, Body.Condition ~ Diet*Sex )
+pander(summary(mod))
+```
+
+# 3. Infection analysis: Does weight or body condition score vary as a function of myco exposure dosage, diet, or sex (or their interaction)?
+
+### Summary: Some fish were exposed to myco at two exposure dosages. We used a linear model to assess how the these different treatments (including controls) related to fish weight. We also considered that variation in diet or sex could impact these associations. This analysis is a little tricky, as it amounts to testing a potential three-way interaction between treatment, diet, and sex on the effect of weight. We need to be careful about interpretation due to the relatively small number of samples available for assessing such a relationship.
+
+### Our analysis reveals that males are consistently lighter than females (estimate = -63.11, p = 0.03301), males exposed during myco treatment dose 2 are on average heavier than males exposed to myco treatment dose 1 or controls (estimate = 128.4, p = 0.03014), and that of such dose 2 exposed males, individuals fed a ZIRC diet tend to be lighter weight than individuals fed Watts or Gemma (estimate = -184.2, slope = 0.03019).
+
+### We repeated this analysis using body condition score. Here, we find that males fed the Watts diet have improved condition scores as compared to than females fed the Watts diet (estimate = 0.9725, p = 0.005825), though I suspect this finding is driven by a single outlier observation. No other significant effects were observed.
+
+### The following code documents these analyses. Again, we need to be very careful about overinterpretation, as we are both underpowered and more likely to overfit the data.
+
+### Note that I did try to eliminate sex as a variable from the body condition score analysis to improve power. When assessing a linear model of just the effect of sex on body condition score, we find a significant main effect of sex wherein males have a slightly improved condition than females (estimate = 0.2923, p = 0.002377), but this asociation is eliminated when we also consider diet (so effect sizes are probably small and we are underpowered). There are no main effects of diet on body condition score.  Additionally, the only treatment to manifest a main effect is dose 1 (estimate = 0.2292, p = 0.04347), but this goes away when we also consider diet in the model (again, small effects and low power).
+
+#### Weight
+```{r myco-doseall-weight}
+## Filter the data
+data <- dt2 %>%
+  filter(
+    Age.Days == "129" |
+    Age.Days == "130"
+  )
+## Weight.mg
+### Visualize
+data %>%
+  ggplot(aes(y=Weight.mg, x=Diet, fill=Sex )) + 
+  geom_boxplot() +
+  facet_wrap(~Treatment) + 
+  geom_point(pch = 21, position = position_jitterdodge())
+### Worried there are Sex differences between diets. Is this true?
+pander(table(data$Diet, data$Sex, data$Treatment))
+### It looks like Gemma is low on females, ZIRC is a bit high on females
+### Also, we have to be very careful about interpretation - some of the 
+### groups have a very small number of samples (see Watt, exposed dose1, males or females)
+
+### Regardless, let's try our lm(). We seem to have a 3-way interaction. Are we powered to detect?
+mod <- lm( data = data, Weight.mg ~ Treatment*Diet*Sex )
+pander(summary(mod))
+### There are some significant associations here, but I'm a little worried about overfitting/small sample sizes.
+```
+
+#### Body condition score
+```{r myco-doseall-body}
+## Filter the data
+data <- dt2 %>%
+  filter(
+    Age.Days == "129" |
+    Age.Days == "130"
+  )
+## Body Condition
+### Visualize
+data %>%
+  ggplot(aes(y=Body.Condition, x=Diet, fill=Sex )) + 
+  geom_boxplot() +
+  facet_wrap(~Treatment) + 
+  geom_point(pch = 21, position = position_jitterdodge())
+
+### Again, let's be careful about small number of samples and try our lm(). We seem to have a 3-way interaction. Are we powered to detect?
+mod <- lm( data = data, Body.Condition ~ Treatment*Diet*Sex )
+pander(summary(mod))
+
+### Let's specifically test for sex effects to see if we can drop this variable from the body condition score analysis here.
+mod <- lm( data = data, Body.Condition ~ Sex )
+pander(summary(mod))
+### Looks like Sex has a main effect
+
+### What about just looking at diet?
+mod <- lm( data = data, Body.Condition ~ Diet )
+pander(summary(mod))
+### No clear diet effect
+
+### Let's look at diet by sex
+mod <- lm( data = data, Body.Condition ~ Diet*Sex )
+pander(summary(mod))
+### No clear effect
+
+### What about just treatment?
+mod <- lm( data = data, Body.Condition ~ Treatment )
+pander(summary(mod))
+### Weird - dose 1 have slightly higher than controls, no difference in dose 2 with controls
+
+### What about treatment by diet (since the diet by sex effect doesn't exist)
+mod <- lm( data = data, Body.Condition ~ Diet*Treatment )
+pander(summary(mod))
+### No effects
+```
+
+# 4. Infection analysis: Does weight or body condition score vary as a function of myco exposure state (exposed or not) and diet (or their interaction)?
+
+### Summary: Some fish were exposed to myco at two exposure dosages. We used a linear model to assess how whether exposure to myco at any dose related to fish weight relative to unexposed controls. We also considered that variation in diet or sex could impact these associations. Same concerns about a three way analysis as articulated above apply here, though we have some improved power because we can group samples by exposure state, rather than by the more partitioned exposure dosage amount.
+
+### Our analysis reveals that males are consistently lighter than females (estimate = -63.11, p = 0.03301), and there is modest evidence that the ZIRC diet results in heavier fish (estimate = 48.79, p = 0.08869). 
+
+### We repeated this analysis using body condition score. Here, we find that males fed the Watts diet have improved condition scores as compared to than females fed the Watts diet (estimate = 0.9725, p = 0.007232), though I suspect this finding is driven by outliers. There is also modest evidence that exposed males fed watts have reduced condition scores compared to unexposed males fed watts (estime = -0.9132, p = 0.05835), though again an outlier may drive this effect.
+
+### The following code documents these analyses. Again, we need to be very careful about overinterpretation, as we are both underpowered and more likely to overfit the data.
+
+```{r myco-combine-exposure}
+## Filter the data
+data <- dt2 %>%
+  filter(
+    Age.Days == "129" |
+    Age.Days == "130"
+  )
+data$Exposure <- ifelse( data$Treatment == "control", "control", "exposed" )
+## Weight
+data %>%
+  ggplot(aes(y=Weight.mg, x=Diet, fill=Sex )) + 
+  geom_boxplot() +
+  facet_wrap(~Exposure) +
+  geom_point(pch = 21, position = position_jitterdodge())
+mod <- lm( data = data, Weight.mg ~ Diet*Exposure*Sex )
+pander(summary(mod))
+## Body Condition
+### Visualize
+data %>%
+  ggplot(aes(y=Body.Condition, x=Diet, fill=Sex )) + 
+  geom_boxplot() +
+  facet_wrap(~Exposure) + 
+  geom_point(pch = 21, position = position_jitterdodge())
+mod <- lm( data = data, Body.Condition ~ Diet*Exposure*Sex )
+pander(summary(mod))
+```
+
+# 5. How does diet effect pathology results?
+
+### Here I looked at just the Myco data to see how Diet type impacts pathology scores as measured by histology. It looks like only the exposed fish were assessed for pathology, so I've limited my analysis to those fish. 
+
+### I selected just the exposed fish and used a regression model to determine if, for exposed fish, Diet links to pathology score in a Dose dependent fashion. To do so, I constructed logistic regression models. I also evaluated the relationship between just Diet and Pathology Result. Finally, I looked at the Diet by Pathology result via a chisquare test. I did this for both the early time point samples (days 164 and 165), late time point samples (days 213 and 214), and on a combination of all data regardless of time.
+
+### Results
+
+### For the early time point samples, none of my analyses point to a significant association between Diet and pathology result. I sliced and diced the data a lot of different ways. But, it sure looks like it might be different (esp for Watts) if we had more individuals.
+
+### For the late time point samples, we find no signficant results when we consider the interation between Diet and Dose (e.g., Results ~ Diet*Dose), but a model of just Diet alone (e.g., Results ~ Diet) reveals that the Zirc diet manifests an increased frequency of positive pathology results (slope = 1.658, p=0.03448) as compared to the Watts and Gemma diets (no signficant differences between these latter two diets). A Chi-square analysis confirms the result (p=0.0027). 
+
+### If we combine all of the samples and ignore time, we see similar results. Interaction analysis shows no significant results. But, if we just look at Results ~ Diet, we see that the ZIRC diet manifests an increase rate of positive pathology results (slope = 1.278, p=0.01771). Chi square confirms (p=0.0228).
+
+### Note that for the analyses with the late time point samples, some were annotated as 'lumen only'. These samples were excluded from the above analysis.
+
+### Let's first look at the day 164/165 samples
+
+```{r check-exposure-pathology-early}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "164" |
+      Age.Days  == "165" ) &
+      Treatment != "control"
+  )
+data %>%
+  ggplot(aes(x=Pathology.Results, fill=Myco.Dose )) + 
+  geom_bar(position="dodge") +
+  facet_wrap(~Diet) +
+  ylab("Number of Fish")
+```
+
+```{r myco-diet-path-logit}
+mod <- glm( factor(Pathology.Results) ~ Diet*factor(Myco.Dose), 
+            data = data,
+            family = binomial(link="logit"))
+pander(summary(mod))
+```
+
+## Power may be harming us here. What if we look at exposed v. unexposed.
+
+```{r myco-diet-path-logit-noxin}
+mod <- glm( factor(Pathology.Results) ~ Diet, 
+            data = data,
+            family = binomial(link="logit"))
+pander(summary(mod))
+```
+
+### What about a chi square test?
+
+```{r chi-sq}
+tab <- table(data$Pathology.Results, data$Diet)
+pander(chisq.test(tab))
+```
+
+```{r lowdose-chi-sq}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "164" |
+      Age.Days  == "165" ) &
+      Myco.Dose == "3.1x10^3" & 
+      Treatment != "control"
+  )
+tab <- table(data$Pathology.Results, data$Diet)
+pander(chisq.test(tab))
+```
+
+```{r highdose-chi-sq}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "164" |
+      Age.Days  == "165" ) &
+      Myco.Dose == "1.0x10^5" & 
+      Treatment != "control"
+  )
+tab <- table(data$Pathology.Results, data$Diet)
+pander(chisq.test(tab))
+```
+
+
+### Let's now investigate the day 213/214 time point
+
+```{r check-exposure-pathology-late}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "213" |
+      Age.Days  == "214" ) &
+      Treatment != "control"
+  )
+
+#there are some Pathology.Result vals of "lumen only"
+#let's drop from our analysis
+data <- data %>%
+  filter(
+    Pathology.Results == "positive" |
+    Pathology.Results == "negative"
+  )
+
+data %>%
+  ggplot(aes(x=Pathology.Results, fill=Myco.Dose )) + 
+  geom_bar(position="dodge") +
+  facet_wrap(~Diet) +
+  ylab("Number of Fish")
+
+#test interaction
+mod <- glm( factor(Pathology.Results) ~ Diet*factor(Myco.Dose), 
+            data = data,
+            family = binomial(link="logit"))
+pander(summary(mod))
+
+#ignore interaction
+mod <- glm( factor(Pathology.Results) ~ Diet, 
+            data = data,
+            family = binomial(link="logit"))
+pander(summary(mod))
+
+tab <- table(data$Pathology.Results, data$Diet)
+pander(chisq.test(tab))
+
+```
+
+### Now let's combine all data, as Mike did
+
+```{r pathology-all-timepoints}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "213" |
+      Age.Days  == "214" |
+      Age.Days  == "164" |
+      Age.Days  == "165" ) &
+      Treatment != "control"
+  )
+
+#there are some Pathology.Result vals of "lumen only"
+#let's drop from our analysis
+data <- data %>%
+  filter(
+    Pathology.Results == "positive" |
+    Pathology.Results == "negative"
+  )
+
+data %>%
+  ggplot(aes(x=Pathology.Results, fill=Myco.Dose )) + 
+  geom_bar(position="dodge") +
+  facet_wrap(~Diet) +
+  ylab("Number of Fish")
+
+#test interaction
+mod <- glm( factor(Pathology.Results) ~ Diet*factor(Myco.Dose), 
+            data = data,
+            family = binomial(link="logit"))
+pander(summary(mod))
+
+#ignore interaction
+mod <- glm( factor(Pathology.Results) ~ Diet, 
+            data = data,
+            family = binomial(link="logit"))
+pander(summary(mod))
+
+tab <- table(data$Pathology.Results, data$Diet)
+pander(chisq.test(tab))
+
+```
+
+# 6. How does diet effect pathology severity?
+
+### Ordinal regression was used to link pathogen severity scores to diet in the exposed myco fish. Again, we assess how these relationships vary across time points as well as myco dosage.
+
+### Results: 
+
+### For the early time point samples,  we see no significant association between diet and severity, regardless of whether we consider the dose of the treatment.
+
+### For the late time point samples, we see no effect when we include an interaction term in our model, but a result that is almost significant at alpha = 0.05 for the ZIRC diet (estimate = 1.197, p=0.07659). 
+
+### When we combine all data regardly of time, we again see no effects when we include an interaction term, but do see a significant effect when we include just the diet term for the ZINC diet (slope = 1.05, p=0.02724)
+
+```{r check-severity}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "164" |
+      Age.Days  == "165" ) &
+      Treatment != "control"
+  )
+data %>%
+  ggplot(aes(x=Myco.Severity.Score, fill=Diet )) + 
+  geom_histogram() +
+  facet_wrap(~Diet)
+
+```
+
+```{r ordinal-regression}
+# following 
+# https://stats.idre.ucla.edu/r/dae/ordinal-logistic-regression/
+mod <- polr( factor(Myco.Severity.Score) ~ Diet*Myco.Dose, data = data, Hess=TRUE)
+pander(summary(mod))
+ctable <- coef(summary(mod))
+p <- pnorm(abs(ctable[,"t value"]), lower.tail=FALSE) *2
+pander(ctable <- cbind(ctable, "p value" = p))
+```
+
+```{r ordinal-regression-noxn}
+# following 
+# https://stats.idre.ucla.edu/r/dae/ordinal-logistic-regression/
+mod <- polr( factor(Myco.Severity.Score) ~ Diet, data = data, Hess=TRUE)
+pander(summary(mod))
+ctable <- coef(summary(mod))
+p <- pnorm(abs(ctable[,"t value"]), lower.tail=FALSE) *2
+pander(ctable <- cbind(ctable, "p value" = p))
+
+```
+
+### What about the 213/214 time point
+
+```{r ordinal-late}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "213" |
+      Age.Days  == "214" ) &
+      Treatment != "control"
+  )
+
+#there are some Pathology.Result vals of "lumen only"
+#let's drop from our analysis
+data <- data %>%
+  filter(
+    Pathology.Results == "positive" |
+    Pathology.Results == "negative"
+  )
+data %>%
+  ggplot(aes(x=Myco.Severity.Score, fill=Diet )) + 
+  geom_histogram() +
+  facet_wrap(~Diet)
+
+
+
+mod <- polr( factor(Myco.Severity.Score) ~ Diet*Myco.Dose, data = data, Hess=TRUE)
+pander(summary(mod))
+ctable <- coef(summary(mod))
+p <- pnorm(abs(ctable[,"t value"]), lower.tail=FALSE) *2
+pander(ctable <- cbind(ctable, "p value" = p))
+
+
+mod <- polr( factor(Myco.Severity.Score) ~ Diet, data = data, Hess=TRUE)
+pander(summary(mod))
+ctable <- coef(summary(mod))
+p <- pnorm(abs(ctable[,"t value"]), lower.tail=FALSE) *2
+pander(ctable <- cbind(ctable, "p value" = p))
+
+```
+
+### Combine all of the timepoint
+
+```{r ordinal-combined}
+data <- dt2 %>%
+  filter(
+    ( Age.Days  == "213" |
+      Age.Days  == "214" |
+      Age.Days  == "164" |
+      Age.Days  == "165" ) &
+      Treatment != "control"
+  )
+
+#there are some Pathology.Result vals of "lumen only"
+#let's drop from our analysis
+data <- data %>%
+  filter(
+    Pathology.Results == "positive" |
+    Pathology.Results == "negative"
+  )
+data %>%
+  ggplot(aes(x=Myco.Severity.Score, fill=Diet )) + 
+  geom_histogram() +
+  facet_wrap(~Diet)
+
+
+mod <- polr( factor(Myco.Severity.Score) ~ Diet*Myco.Dose, data = data, Hess=TRUE)
+pander(summary(mod))
+ctable <- coef(summary(mod))
+p <- pnorm(abs(ctable[,"t value"]), lower.tail=FALSE) *2
+pander(ctable <- cbind(ctable, "p value" = p))
+
+
+mod <- polr( factor(Myco.Severity.Score) ~ Diet, data = data, Hess=TRUE)
+pander(summary(mod))
+ctable <- coef(summary(mod))
+p <- pnorm(abs(ctable[,"t value"]), lower.tail=FALSE) *2
+pander(ctable <- cbind(ctable, "p value" = p))
+
+```

@@ -1,0 +1,265 @@
+
+This chunk of code grabs the relevant data frames/tables generated from the `microbiomeProcessing.R` script for analysis.
+
+```{r}
+
+data <- df.all
+data.alpha <- dt.alphaPlus.all.melt
+data.beta <- df.T1
+data.beta2 <- df.all # Includes pre-exposure fish
+ps.obj <- ps.all
+dist <- distList.T1
+dist2 <- distList.all
+
+
+
+# Relevel
+levels(data$PrePostExp) <- factor(levels(data$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data$PrePostExp <- relevel(factor(data$PrePostExp), ref = "Pre-exposure")
+
+levels(data.alpha$PrePostExp) <- factor(levels(data.alpha$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data.alpha$PrePostExp <- relevel(factor(data.alpha$PrePostExp), ref = "Pre-exposure")
+
+levels(data.beta$PrePostExp) <- factor(levels(data.beta$PrePostExp), levels = c("Exposed", "Unexposed"))
+data.beta$PrePostExp <- relevel(factor(data.beta$PrePostExp), ref = "Unexposed")
+
+levels(data.beta2$PrePostExp) <- factor(levels(data.beta2$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+data.beta2$PrePostExp <- relevel(factor(data.beta2$PrePostExp), ref = "Pre-exposure")
+
+levels(sample_data(ps.obj)$PrePostExp) <- factor(levels(sample_data(ps.obj)$PrePostExp),levels = c("Pre-exposure", "Unexposed", "Exposed"))
+sample_data(ps.obj)$PrePostExp <- relevel(factor(sample_data(ps.obj)$PrePostExp), ref = "Pre-exposure")
+# 
+# levels(data.da$PrePostExp) <- factor(levels(data.da$PrePostExp), levels = c("Pre-exposure", "Unexposed", "Exposed"))
+# data.da$PrePostExp <- relevel(factor(data.da$PrePostExp), ref = "Pre-exposure")
+
+
+
+```
+
+## Clean Variables
+
+Presence of infection was marked as `negative`, or `positive` or `lumen only`. To simplify, we combined `lumen only` and `positive` since both indicate presence of infection.
+
+```{r}
+data <- data %>%
+  # filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results = 
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           ))
+
+data.raw <- data.raw %>%
+  # filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results = 
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           ))
+
+data.alpha <- data.alpha %>%
+  # filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results = 
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           ))
+
+data.beta <- data.alpha %>%
+  # filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results = 
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           ))
+
+sample_data(ps.obj) <- sample.data.frame(ps.obj) %>%
+  # filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results = 
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           ))
+
+
+
+```
+
+## Infection Counts (Microbiome Samples)
+
+This chunk of code outputs figures generated in subsequent chunks into relavent figure folder.
+
+```{r}
+
+# Plot settings
+tmp.path <- "gg_Record/Exposure/Infection"
+gg_record(dir = file.path(path.figures, "gg_Record/Exposure/InfectionBurden"),
+          device = "png",
+          width = 5,
+          height = 5,
+          units = "in"
+          )
+
+```
+
+
+#### Infection ~ Diet
+
+```{r}
+# Check counts
+data %>%
+  filter(PrePostExp == "Exposed" & Sex == "M") %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet) %>%
+  count(name = "Count")
+
+
+# Manually enter counts into a table
+xtab <- as.table(rbind(c(8, 6), c(8,7), c(12, 3)))
+dimnames(xtab) <- list(
+  Diet = c("Gemma", "Watts", "ZIRC"),
+  Pathology.Results = c("Positive", "Negative")
+)
+xtab
+
+stat.test <- pairwise_fisher_test(xtab, detailed = TRUE, p.adjust.method = "BH")
+
+data %>%
+  filter(PrePostExp == "Exposed") %>%
+  # mutate(Pathology.Results = 
+  #          case_when(
+  #            Pathology.Results == "negative" ~ "Negative",
+  #            Pathology.Results == "positive" ~ "Positive",
+  #            Pathology.Results == "lumen only" ~ "Positive"
+  #          )) %>%
+  group_by(Pathology.Results, Diet) %>%
+  count(name = "Count") %>%
+  pivot_wider(data = ., names_from = Pathology.Results, values_from = Count) %>%
+  group_by(Diet) %>%
+  summarize(Proportion = Positive/(Negative + Positive)) %>%
+  ggplot(aes(x = Diet, y = Proportion)) +
+  geom_bar(aes(fill = Diet), stat = "identity", position = position_dodge2(preserve = "single"), width = .9) +
+  # facet_grid(. ~ Diet) +
+  scale_fill_manual(values = pal.Dark2) +
+  labs(
+    title = "Proportion of positive infections",
+    caption = "7mo, exposed",
+    x = "Diet",
+    y = "Proportion"
+  ) +
+  ggpubr::stat_pvalue_manual(stat.test, 
+                             label = "p.adj.signif", 
+                             size = 6,
+                             bracket.size = 1,
+                             y.position = c(.75, .9, 1.05)) +
+  geom_text(
+    stat = "identity",
+    aes(label = round(Proportion, 3)),
+    size = 6,
+    vjust = 2
+  ) +
+  scale_y_continuous(breaks = scales::breaks_pretty(n = 6), 
+                     limits = c(0, 1.1)) + 
+  theme(legend.position = "none")
+
+stat.test %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = c(4:7, 10), digits = 3) %>%
+  # merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Pairwise Fisher Test. p. adj: BH. Pathology.Results ~ Diet")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "PairwiseFisherTest_PathResults-Diet_7moExp.png"))
+
+```
+
+Chi-Square
+
+```{r}
+
+data %>%
+  filter(PrePostExp == "Exposed") %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet) %>%
+  count(name = "Count")
+
+data %>% 
+  filter(PrePostExp == "Exposed" & Sex == "M") %>%
+  mutate(Pathology.Results =
+         case_when(
+           Pathology.Results == "negative" ~ "Negative",
+           Pathology.Results == "positive" ~ "Positive",
+           Pathology.Results == "lumen only" ~ "Positive"
+         )) %>%
+  rownames_to_column("Fish.ID") %>%
+  group_by(Fish.ID) %>% 
+  distinct(Fish.ID, Pathology.Results, Diet) %>%
+  ungroup %>%
+  summarize(method = chisq.test(Pathology.Results, Diet)$method,
+            statistic = chisq.test(Pathology.Results, Diet)$statistic,
+            parameter = chisq.test(Pathology.Results, Diet)$parameter,
+            p.value = chisq.test(Pathology.Results, Diet)$p.value
+            )
+
+```
+Kruskal-Wallis
+
+```{r}
+data %>%
+  filter(PrePostExp == "Exposed" 
+         # & Sex == "M"
+         ) %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet, Sex) %>%
+  count(name = "Count") %>%
+  glm(formula = Count ~ Diet + Sex + Pathology.Results, family = "poisson") %>% 
+  Anova(type = 2)
+  summary()
+
+```
+
+
+
+GLM Poisson
+
+```{r}
+data %>%
+  filter(PrePostExp == "Exposed" 
+         # & Sex == "M"
+         ) %>%
+  mutate(Pathology.Results =
+           case_when(
+             Pathology.Results == "negative" ~ "Negative",
+             Pathology.Results == "positive" ~ "Positive",
+             Pathology.Results == "lumen only" ~ "Positive"
+           )) %>%
+  group_by(Pathology.Results, Diet, Sex) %>%
+  count(name = "Count") %>%
+  glm(formula = Count ~ Diet + Sex + Pathology.Results, family = "poisson") %>% 
+  Anova(type = 2)
+  summary()
+
+
+```

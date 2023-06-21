@@ -34,7 +34,7 @@ data <- df.T0
 data.alpha <- dt.alphaPlus.T0.melt
 ps.obj <- ps.T0
 dist <- distList.T0
-data.diffAb <- diffAb.conT0
+# data.diffAb <- diffAb.conT0
 
 levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
 data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")

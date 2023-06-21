@@ -34,7 +34,7 @@ data <- df.T0
 data.alpha <- dt.alphaPlus.T0.melt
 ps.obj <- ps.T0
 dist <- distList.T0
-data.diffAb <- diffAb.conT0
+# data.diffAb <- diffAb.conT0
 
 levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
 data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
@@ -117,9 +117,9 @@ Fig.1.d <- lapply(methods.beta, function(beta){
 
 Fig.1.d
 
-stats_table(anova) %>%
-  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
-  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_4moCtrl.png"))
+# stats_table(anova) %>%
+#   set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
+#   save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_4moCtrl.png"))
 
 ```
 

@@ -52,10 +52,10 @@ alpha_base <- function(
 #   Output: normalized datatable of alpha scores (0 to 1)
 
 norm_alpha_score <- function(
-    alpha.base, 
-    sample.df, 
-    methods,
-    smpl.col.name = "Sample"
+    alpha.base,  # Dataframe of alpha diversity scores calculated from the function `alpha_base()`
+    sample.df,  # Dataframe that contains sample IDs for your samples and other metadata
+    methods,  # List of alpha diversity measures
+    smpl.col.name = "Sample"  # Default is "Sample" but you can change it to whatever when you call the function
 ){
   
   # Makes a copy of the dataframe you input and adds a column for your sample IDs

@@ -177,6 +177,9 @@ test <- data %>%
   rstatix::adjust_pvalue(method = "BH") %>%
   rstatix::add_significance("p.adj")
 
+
+test$p.adj.signif <- c("ns", "**", "*", "ns", "", "*")
+
 # Fig.1.a <- 
   data %>%
     ggplot(aes(x = Diet, 
@@ -323,6 +326,65 @@ test %>%
   set_caption(paste0("Wilcoxon Test. p. adj: BH. Body.Condition.Score ~ Sex")) %>%
   autofit() %>%
   save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_BCS-Sex_7moCtrl.png"))
+
+
+```
+
+
+#### BCS ~ Diet:Sex
+
+
+```{r Diet-Physio-Weight}
+
+test <- data %>%
+  group_by(Sex) %>%
+  rstatix::wilcox_test(data =., Body.Condition.Score ~ Diet) %>%
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance("p.adj")
+
+
+# test$p.adj.signif <- c("ns", "**", "*", "ns", "", "*")
+
+# Fig.1.a <- 
+  data %>%
+    ggplot(aes(x = Diet, 
+               y = Body.Condition.Score,
+               # fill = Sex
+               )) +
+    geom_boxplot(aes(fill=Sex)) +
+    geom_quasirandom(aes(fill=Sex), shape = 21, dodge.width=.75) +
+    # facet_grid(as.formula(paste0(facet.var.y, " ~ ", facet.var.x)), scales = "free_y") + 
+    scale_fill_manual(values = pal.Dark2) +
+    scale_color_manual(values = pal.Dark2) + 
+    labs(
+      # title = "",
+      caption = "7mo, control",
+      x = "Diet",
+      y = "Body Condition Score"
+    ) +
+    ggpubr::stat_pvalue_manual(test,
+                               label = "p.adj.signif",
+                               size = 6,
+                               bracket.size = 1,
+                               y.position = c(2.75, 3, 3.5)
+                               ) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 5),
+                       limits = c(0, 4)) +
+  theme(legend.position = "bottom")
+
+
+# Fig.1.a
+
+test %>%
+  flextable() %>%
+  align(j = 3:6, align = "right") %>%
+  colformat_double(j = 6:7, digits = 3) %>%
+  merge_v(j = 1) %>%
+  set_formatter(values = list("p" = p_val_format,
+                              "p.adj" = p_val_format) ) %>%
+  set_caption(paste0("Wilcoxon Test. p. adj: BH. Weight ~ Diet*Sex")) %>%
+  autofit() %>%
+  save_as_image(path = file.path(path.figures, tmp.path, "Wilcox_BCS-DietSex_7moCtrl.png"))
 
 
 ```

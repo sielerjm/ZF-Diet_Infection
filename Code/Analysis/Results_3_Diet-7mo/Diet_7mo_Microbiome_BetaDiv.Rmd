@@ -33,7 +33,7 @@ data <- df.conT1
 data.alpha <- dt.alphaPlus.conT1.melt
 ps.obj <- ps.conT1
 dist <- distList.conT1
-data.diffAb <- diffAb.conT1
+# data.diffAb <- diffAb.conT1
 
 levels(data.alpha$Diet) <- factor(levels(data.alpha$Diet), levels = c("Gemma", "Watts", "ZIRC"))
 data.alpha$Diet <- relevel(factor(data.alpha$Diet), ref = "Gemma")
@@ -119,9 +119,9 @@ Fig.1.d <- lapply(methods.beta, function(beta){
 
 Fig.1.d
 
-stats_table(anova) %>%
-  set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
-  save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_7moCtrl.png"))
+# stats_table(anova) %>%
+#   set_caption(paste0("Distance-based redundancy analysis (dbRDA) ordination. Beta.Score ~ Diet")) %>%
+#   save_as_image(path = file.path(path.figures, tmp.path, "dbRDA_ANOVA_Beta-Diet_7moCtrl.png"))
 
 ```
 
@@ -183,15 +183,14 @@ beta.disp.stats[["pairwise"]] <-lapply(beta.disp, function(beta) {
     tidy() %>%
     rename(Names = names,
            `p-value` = x) %>%
-    flextable()
+    flextable() 
 }) %>% setNames(methods.beta)
 
 lapply(c("anova", "pairwise"), function(x){
   lapply(beta.disp.stats[x], function(test){
     lapply(methods.beta, function(beta){
-  beta.disp.stats[[x]][[beta]] %>%
-  save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-Diet_7moCtrl.png"))
-                )
+  beta.disp.stats[[x]][[beta]] #%>%
+  # save_as_image(path = file.path(path.figures, tmp.path, paste0("Disp_Beta-", x, "-",beta, "-Diet_7moCtrl.png")) )
    })
   })
 })

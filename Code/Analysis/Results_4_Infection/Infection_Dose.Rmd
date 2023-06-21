@@ -1,0 +1,263 @@
+---
+title: "Dose Infection"
+author: "Michael Sieler"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    number_sections: yes
+    theme: united
+    highlight: tango
+  pdf_document: 
+    toc: yes
+    toc_depth: '3'
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  cache = FALSE,
+  warning = FALSE,
+  message = FALSE, 
+  # fig.width = 5, fig.height = 5,
+  dpi = 300
+)
+
+# Set project path to project level
+proj.path <- paste0(getwd(), "/../../")
+
+
+```
+
+## Import Data
+
+
+```{r}
+
+library(readxl)
+library(purrr) # for map function
+library(broom)
+library(flextable)
+
+# Load last to prevent library function conflicts
+library(tidyverse)
+
+# Raw Data, unsubsetted
+raw.data.file <- "/Users/michaelsieler/Dropbox/Mac (2)/Documents/Sharpton_Lab/Projects_Repository/Kent/ZF-Diet_Infection/Data/Raw/Archive/OSU Diet Study Primary Excel CA072820 [RawData].xlsx"
+
+data.raw <- readxl::read_excel(raw.data.file)
+
+
+# specify the path of the Excel workbook
+excel_file <- "/Users/michaelsieler/Dropbox/Mac (2)/Documents/Sharpton_Lab/Projects_Repository/Kent/ZF-Diet_Infection/Data/Raw/Archive/DSF Myco Histo Results 5 and 15 wk May 2023-clean.xlsx"
+
+# read all sheets into a list of dataframes
+sheet_names <- excel_sheets(excel_file)
+dose.data.list <- map(sheet_names, ~ read_excel(excel_file, sheet = .x))
+
+read_excel(excel_file, sheet = 2)
+
+
+# view the first few rows of each dataframe in the list
+map(dose.data.list, head)
+
+
+```
+
+
+## Infection Counts
+
+Compare infection counts between doses.
+
+### Overview
+
+```{r}
+
+data.raw %>% 
+  # Filter out data not relevant to our study (i.e. Pcapp fish)
+    filter(`Experiment (e.g. Myco)` != "4 mo interfacility/pcapp") %>%
+  # Compare fish after exposure
+    filter(`Age (Days)` > 140) %>%
+  # Remove controls
+    filter(`Myco Dose` != 0) %>% 
+    filter(`Pathology Results` != "NA") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(`Pathology Results` = case_when(`Pathology Results` == "lumen only" ~ "negative",
+                                           `Pathology Results` == "positive" ~ "positive",
+                                           `Pathology Results` == "negative" ~ "negative")) %>%
+  # Count pathology results by dose type
+    count(`Myco Dose`, `Pathology Results`) %>%
+  # Format the resulting dataframe
+    spread(key = `Pathology Results`, value = n, fill = 0)
+
+
+
+```
+
+### Chi-Square test
+
+##### 5 wpe
+
+This code chunk compares the infection counts between doses of only 5 wpe fish 
+
+```{r}
+
+count <-
+data.raw %>% 
+  # Filter out data not relevant to our study (i.e. Pcapp fish)
+    filter(`Experiment (e.g. Myco)` == "5 wpe M. chelonae") %>%
+  # Compare fish after exposure
+    filter(`Age (Days)` > 140) %>%
+  # Remove controls
+    filter(`Myco Dose` != 0) %>% 
+    filter(`Pathology Results` != "NA") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(`Pathology Results` = case_when(`Pathology Results` == "lumen only" ~ "negative",
+                                           `Pathology Results` == "positive" ~ "positive",
+                                           `Pathology Results` == "negative" ~ "negative")) %>%
+  count() %>%
+  .$n
+
+# chiSq.result.5wpe <-
+data.raw %>% 
+  # Filter out data not relevant to our study (i.e. Pcapp fish)
+    filter(`Experiment (e.g. Myco)` == "5 wpe M. chelonae") %>%
+  # Compare fish after exposure
+    filter(`Age (Days)` > 140) %>%
+  # Remove controls
+    filter(`Myco Dose` != 0) %>% 
+    filter(`Pathology Results` != "NA") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(`Pathology Results` = case_when(`Pathology Results` == "lumen only" ~ "negative",
+                                           `Pathology Results` == "positive" ~ "positive",
+                                           `Pathology Results` == "negative" ~ "negative")) %>%
+  # Count pathology results by dose type
+    count(`Myco Dose`, `Pathology Results`) %>%
+  # Format the resulting dataframe
+    spread(key = `Pathology Results`, value = n, fill = 0) %>%
+  # Remove first column for matrix formatting
+    select(-`Myco Dose`) %>%
+  # Convert tibble to matrix
+    as.matrix() %>%
+  # Run chi-square test
+    chisq.test() %>% 
+  # Convert to results to a dataframe
+    broom::tidy() %>%
+  # Make table
+    flextable() %>%
+  # Flextable additions
+    set_caption(caption = paste0("Infection count between doses of 5 weeks post exposed fish (n = ", count, ")"))
+
+# X-squared = 0.34152, df = 1, p-value = 0.559
+```
+
+
+
+##### 15 wpe
+
+This code chunk compares the infection counts between doses of only 15 wpe fish 
+
+```{r}
+
+count <-
+data.raw %>% 
+  # Filter out data not relevant to our study (i.e. Pcapp fish)
+    filter(`Experiment (e.g. Myco)` == "15 wpe M. chelonae/ 7 mo.") %>%
+  # Compare fish after exposure
+    filter(`Age (Days)` > 140) %>%
+  # Remove controls
+    filter(`Myco Dose` != 0) %>% 
+    filter(`Pathology Results` != "NA") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(`Pathology Results` = case_when(`Pathology Results` == "lumen only" ~ "negative",
+                                           `Pathology Results` == "positive" ~ "positive",
+                                           `Pathology Results` == "negative" ~ "negative")) %>%
+  count() %>%
+  .$n
+
+data.raw %>% 
+  # Filter out data not relevant to our study (i.e. Pcapp fish)
+    filter(`Experiment (e.g. Myco)` == "15 wpe M. chelonae/ 7 mo.") %>%
+  # Compare fish after exposure
+    filter(`Age (Days)` > 140) %>%
+  # Remove controls
+    filter(`Myco Dose` != 0) %>% 
+    filter(`Pathology Results` != "NA") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(`Pathology Results` = case_when(`Pathology Results` == "lumen only" ~ "negative",
+                                           `Pathology Results` == "positive" ~ "positive",
+                                           `Pathology Results` == "negative" ~ "negative")) %>%
+  # Count pathology results by dose type
+    # group_by(`Experiment (e.g. Myco)`) %>%
+    count(`Myco Dose`, `Pathology Results`) %>%
+  # Format the resulting dataframe
+    spread(key = `Pathology Results`, value = n, fill = 0) %>%
+  # Remove first column for matrix formatting
+    select(-`Myco Dose`) %>%
+  # Convert tibble to matrix
+    as.matrix() %>%
+  # Run chi-square test
+    chisq.test() %>% 
+  # Convert to results to a dataframe
+    broom::tidy() %>%
+  # Make table
+    flextable() %>%
+  # Flextable additions
+    set_caption(caption = paste0("Infection count between doses of 5 weeks post exposed fish (n = ", count, ")"))
+
+# X-squared = 2.5877, df = 1, p-value = 0.1077
+```
+
+
+#### Microbiome Subset
+
+This code chunk compares the infection counts between doses of only 5 wpe fish 
+
+```{r}
+
+count <-
+df.all %>%
+  # Remove controls
+    filter(Dose != 0) %>%
+  # Removes pre-exposure fish
+    filter(PrePostExp != "Pre-exposure") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(Pathology.Results = case_when(Pathology.Results == "lumen only" ~ "negative",
+                                           Pathology.Results == "positive" ~ "positive",
+                                           Pathology.Results == "negative" ~ "negative")) %>%
+  count() %>%
+  .$n
+
+
+df.all %>%
+  # Remove controls
+    filter(Dose != 0) %>%
+  # Removes pre-exposure fish
+    filter(PrePostExp != "Pre-exposure") %>%
+  # Infection in lumen is not indicative of systemic infection, thus categorized as "negative"
+    mutate(Pathology.Results = case_when(Pathology.Results == "lumen only" ~ "negative",
+                                           Pathology.Results == "positive" ~ "positive",
+                                           Pathology.Results == "negative" ~ "negative")) %>%
+  # Count pathology results by dose type
+    count(Dose, Pathology.Results) %>%
+  # Format the resulting dataframe
+    spread(key = Pathology.Results, value = n, fill = 0) %>%
+  # Remove first column for matrix formatting
+    select(-Dose) %>%
+  # Convert tibble to matrix
+    as.matrix() %>%
+  # Run chi-square test
+    chisq.test() %>% 
+  # Convert to results to a dataframe
+    broom::tidy() %>%
+  # Make table
+    flextable() %>%
+  # Flextable additions
+    set_caption(caption = paste0("Infection count between doses of 5 weeks post exposed fish (n = ", count, ")"))
+
+# X-squared = 0.2093, df = 1, p-value = 0.6473
+
+```
+

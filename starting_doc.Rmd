@@ -65,17 +65,4 @@ source(paste0(proj.path,"/Code/Functions/StartFunctions/plot_settings.R"))
 
 ```
 
-## Post-Dada2 Processing
-
-This script cleans up the Phyloseq object for downstream analysis
- - Loads Phyloseq with cleaned metadata
- - Rarefies, CLR transforms Phyloseq object
- - Outputs a rarefied and CLR-transformed Phyloseq object in the `/Input` directory
-
-
-```{r}
-
-# source(paste0(path.code,"/Functions/AnalysisFunctions/postDada2Functions.R"))
-
-```
 

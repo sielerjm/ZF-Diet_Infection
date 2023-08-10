@@ -1,1 +1,1 @@
-This is a template for maintaining project structure consistency across repos.
+Repository of the analysis used for [Sieler, M., Al-Samarrie, C., Kasschau, K. et al. Disentangling the link between zebrafish diet, gut microbiome succession, and Mycobacterium chelonae infection. anim microbiome 5, 38 (2023). https://doi.org/10.1186/s42523-023-00254-8](https://doi.org/10.1186/s42523-023-00254-8)

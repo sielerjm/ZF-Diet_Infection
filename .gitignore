@@ -5,6 +5,10 @@
 # Ignore these directories
 *Archive
 *FastQs
+*Biblio
+*Manuscript
+*Presentations
+#PDFs
 
 # Session Data files
 .RData
